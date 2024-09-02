@@ -1,0 +1,15 @@
+[package]
+name = "combadge"
+version = "0.1.0"
+authors = ["Dan Stoza <stoza@periapt.media>"]
+edition = "2021"
+description = "Combadge makes Rust Web Workers easy"
+repository = "https://github.com/tavern-works/combadge"
+license = "MIT"
+
+[dependencies]
+
+[lints.clippy]
+all = { level = "deny", priority = -2 }
+nursery = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
