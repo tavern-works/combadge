@@ -1,7 +1,6 @@
 use std::any::type_name;
 
 use js_sys::Array;
-#[cfg(feature = "serde")]
 use serde::{de::DeserializeOwned, Serialize};
 use wasm_bindgen::JsValue;
 
@@ -22,20 +21,19 @@ impl<T> SerdePost for T {
     }
 }
 
-#[cfg(feature = "serde")]
 impl<'de, T> SerdePost for T
 where
     T: DeserializeOwned + Serialize,
 {
     fn deserialize_from_js_value(value: JsValue) -> Result<Self, Error> {
-        serde_wasm_bindgen::from_value(value).map_err(|error| Error::FailedToDeserialize {
+        serde_wasm_bindgen::from_value(value).map_err(|error| Error::DeserializeFailed {
             type_name: String::from(type_name::<T>()),
             error: format!("{error}"),
         })
     }
 
     fn serialize_to_js_value(&self) -> Result<JsValue, Error> {
-        serde_wasm_bindgen::to_value(self).map_err(|error| Error::FailedToSerialize {
+        serde_wasm_bindgen::to_value(self).map_err(|error| Error::SerializeFailed {
             type_name: String::from(type_name::<T>()),
             error: format!("{error}"),
         })
@@ -94,7 +92,7 @@ impl Message {
         Ok(())
     }
 
-    fn transfer<T>(&mut self, message: T)
+    pub fn transfer<T>(&mut self, message: T)
     where
         T: Post + Clone,
     {
@@ -103,12 +101,12 @@ impl Message {
         self.transfer.push(post);
     }
 
-    fn send<T>(self, sender: T)
+    pub fn send<T>(self, sender: T) -> Result<(), Error>
     where
-        T: FnOnce(&JsValue, &JsValue),
+        T: FnOnce(&JsValue, &JsValue) -> Result<(), Error>,
     {
         let message = self.message.into_iter().collect::<Array>();
         let transfer = self.transfer.into_iter().collect::<Array>();
-        sender(message.as_ref(), transfer.as_ref());
+        sender(message.as_ref(), transfer.as_ref())
     }
 }

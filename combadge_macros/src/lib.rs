@@ -7,6 +7,7 @@ use syn::{parse, parse_macro_input, FnArg, ItemTrait, Pat, ReturnType, TraitItem
 #[proc_macro_attribute]
 pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let item: ItemTrait = parse_macro_input!(item);
+    let trait_name = item.ident.clone();
 
     let functions = item
         .items
@@ -35,15 +36,9 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
         .map(|(index, arguments)| {
             let non_receiver = arguments
                 .iter()
-                .filter_map(|arg| {
-                    let pat = match arg {
-                        FnArg::Receiver(_) => None,
-                        FnArg::Typed(typed) => Some(typed.pat.clone()),
-                    }?;
-                    match *pat {
-                        Pat::Ident(ident) => Some(ident.ident),
-                        _ => None,
-                    }
+                .filter_map(|arg| match arg {
+                    FnArg::Receiver(_) => None,
+                    FnArg::Typed(typed) => Some(typed.clone()),
                 })
                 .collect::<Vec<_>>();
 
@@ -55,6 +50,29 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
             }
 
             non_receiver
+        })
+        .collect::<Vec<_>>();
+
+    let non_receiver_name = non_receiver
+        .iter()
+        .map(|non_receiver| {
+            non_receiver
+                .iter()
+                .filter_map(|item| match item.pat.as_ref() {
+                    Pat::Ident(ident) => Some(ident.clone()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+
+    let non_receiver_type = non_receiver
+        .iter()
+        .map(|non_receiver| {
+            non_receiver
+                .iter()
+                .map(|item| item.ty.clone())
+                .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
 
@@ -74,7 +92,7 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
         }
 
         impl #client_name {
-            pub fn new(worker: ::combadge::prelude::web_sys::Worker) -> Self {
+            pub fn new(worker: web_sys::Worker) -> Self {
                 Self { client: ::combadge::Client::new(worker) }
             }
 
@@ -82,16 +100,14 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 pub async fn #name(#(#argument),*) -> #result {
                     let mut message = ::combadge::Message::new(#name_string);
                     #(
-                        message.post(#non_receiver)?;
+                        message.post(#non_receiver_name)?;
                     )*
-                    let client = self.client.try_borrow().map_err(|_| ::combadge::Error::ClientUnavailable)?;
-                    client.send_message(message).await
+                    let worker = self.client.try_borrow().map_err(|_| ::combadge::Error::ClientUnavailable)?.worker.clone();
+                    ::combadge::Client::send_message(worker, message).await
                 }
             )*
         }
     };
-
-    println!("{}", client);
 
     let server_name = format_ident!("{}Server", item.ident);
     let server = quote! {
@@ -100,14 +116,36 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
         }
 
         impl #server_name {
-            pub fn new() -> Self {
-                log::info!("inside ss new");
+            pub fn new(mut local: Box<dyn #trait_name>) -> Self {
+                let dispatch = Box::new(move |procedure: &str, data| {
+                    match procedure {
+                        #(
+                            #name_string => Self::#name(local.as_mut(), data),
+                        )*
+                        _ => Err(::combadge::Error::UnknownProcedure{ name: String::from(procedure) })
+                    }
+                });
+
                 Self {
-                    server: ::combadge::Server::new(),
+                    server: ::combadge::Server::new(dispatch),
                 }
             }
+
+            #(
+                fn #name(local: &mut dyn #trait_name, data: js_sys::Array) -> Result<(), ::combadge::Error> {
+                    #(
+                        static_assertions::assert_impl_any!(#non_receiver_type: Into<wasm_bindgen::JsValue>, serde::Serialize);
+                        let #non_receiver = ::combadge::Post::from_js_value(data.shift())?;
+                    )*
+                    let result = local.#name(#(#non_receiver_name),*);
+                    let port: web_sys::MessagePort = data.shift().into();
+                    port.post_message(&::combadge::Post::to_js_value(result)?).map_err(|error| ::combadge::Error::PostFailed{ error: format!("{error:?}")})
+                }
+            )*
         }
     };
+
+    println!("{}", server);
 
     let result: TokenStream = quote! {
         #item

@@ -8,22 +8,24 @@ repository = "https://github.com/tavern-works/combadge"
 license = "MIT"
 
 [features]
-default = ["log", "serde"]
-serde = ["dep:serde", "dep:serde-wasm-bindgen"]
+default = ["log"]
 
 [dependencies]
 combadge_macros = { path = "./combadge_macros" }
 js-sys = "0.3"
 log = { version = "0.4", optional = true }
-serde = { version = "1", optional = true }
-serde-wasm-bindgen = { version = "0.6", optional = true }
+serde = { version = "1" }
+serde-wasm-bindgen = { version = "0.6" }
+static_assertions = "1"
 thiserror = "1"
 wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
 
 [dependencies.web-sys]
 version = "0.3"
 features = [
     "DedicatedWorkerGlobalScope",
+    "MessageChannel",
     "MessageEvent",
     "MessagePort",
     "Worker",

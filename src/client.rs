@@ -1,8 +1,10 @@
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 
+use js_sys::{Array, Promise};
 use wasm_bindgen::prelude::*;
-use web_sys::{MessageEvent, Worker};
+use wasm_bindgen_futures::JsFuture;
+use web_sys::{MessageChannel, MessageEvent, Worker};
 
 use crate::message::Post;
 use crate::{Error, Message};
@@ -11,7 +13,7 @@ use crate::{Error, Message};
 pub struct Client {
     weak_self: Weak<RefCell<Self>>,
     on_message: Closure<dyn Fn(MessageEvent)>,
-    worker: Worker,
+    pub worker: Worker,
     server_ready: bool,
 }
 
@@ -29,7 +31,7 @@ impl Client {
 
             #[cfg(feature = "log")]
             log::info!("Sending hello to server");
-            worker.post_message(&JsValue::from_str("hello from client"));
+            worker.post_message(&Array::of1(&JsValue::from_str("hello from client")));
 
             RefCell::new(Self {
                 weak_self: weak_self.clone(),
@@ -42,10 +44,39 @@ impl Client {
         client
     }
 
-    pub async fn send_message<T>(&self, message: Message) -> Result<T, Error>
+    pub async fn send_message<T>(worker: Worker, mut message: Message) -> Result<T, Error>
     where
-        T: Post,
+        T: Post + std::fmt::Debug,
     {
-        unimplemented!()
+        let channel = MessageChannel::new().map_err(|error| Error::CreationFailed {
+            type_name: String::from("MessageChannel"),
+            error: format!("{error:?}"),
+        })?;
+
+        let promise = Promise::new(&mut |resolve, _reject| {
+            let callback = Closure::once_into_js(move |message: MessageEvent| {
+                let _ = resolve.call1(&JsValue::NULL, &message.data());
+            });
+
+            channel
+                .port2()
+                .set_onmessage(Some(callback.as_ref().unchecked_ref()));
+        });
+
+        message.transfer(channel.port1());
+        message.send(|message, transfer| {
+            worker
+                .post_message_with_transfer(message, transfer)
+                .map_err(|error| Error::PostFailed {
+                    error: format!("{error:?}"),
+                })
+        })?;
+
+        JsFuture::from(promise)
+            .await
+            .map_err(|error| Error::ReceiveFailed {
+                error: format!("{error:?}"),
+            })
+            .and_then(|result| T::from_js_value(result))
     }
 }
