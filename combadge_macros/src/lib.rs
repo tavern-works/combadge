@@ -2,7 +2,7 @@ extern crate proc_macro;
 use proc_macro::TokenStream;
 
 use quote::{format_ident, quote};
-use syn::{parse, parse_macro_input, FnArg, ItemTrait, Pat, ReturnType, TraitItem};
+use syn::{parse_macro_input, FnArg, ItemTrait, Pat, ReturnType, TraitItem};
 
 #[proc_macro_attribute]
 pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -102,8 +102,10 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     #(
                         message.post(#non_receiver_name)?;
                     )*
-                    let worker = self.client.try_borrow().map_err(|_| ::combadge::Error::ClientUnavailable)?.worker.clone();
-                    ::combadge::Client::send_message(worker, message).await
+                    let server_ready = self.client.try_borrow_mut().map_err(|_| ::combadge::Error::ClientUnavailable)?.wait_for_server();
+                    server_ready.await;
+                    let send_message = self.client.try_borrow_mut().map_err(|_| ::combadge::Error::ClientUnavailable)?.send_message(message)?;
+                    send_message.await
                 }
             )*
         }
@@ -145,8 +147,6 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     };
 
-    println!("{}", server);
-
     let result: TokenStream = quote! {
         #item
         #client
@@ -154,7 +154,7 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
     }
     .into();
 
-    println!("{}", prettyplease::unparse(&parse(result.clone()).unwrap()));
+    // println!("{}", prettyplease::unparse(&parse(result.clone()).unwrap()));
 
     result
 }

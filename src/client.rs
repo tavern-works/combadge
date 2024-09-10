@@ -1,7 +1,9 @@
 use std::cell::RefCell;
+use std::future::{ready, Future};
 use std::rc::{Rc, Weak};
 
-use js_sys::{Array, Promise};
+use futures::FutureExt;
+use js_sys::{Array, Function, Promise};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{MessageChannel, MessageEvent, Worker};
@@ -12,41 +14,109 @@ use crate::{Error, Message};
 #[derive(Debug)]
 pub struct Client {
     weak_self: Weak<RefCell<Self>>,
+    #[expect(
+        unused,
+        reason = "The closure needs to be held in memory even though it isn't read"
+    )]
     on_message: Closure<dyn Fn(MessageEvent)>,
     pub worker: Worker,
     server_ready: bool,
+    on_ready: Vec<Function>,
 }
 
 impl Client {
     pub fn new(worker: Worker) -> Rc<RefCell<Self>> {
-        let client = Rc::new_cyclic(|weak_self| {
-            let on_message = Closure::new(|event: MessageEvent| {
-                #[cfg(feature = "log")]
-                log::info!("Client received message: {event:?}");
+        Rc::new_cyclic(|weak_self: &Weak<RefCell<Self>>| {
+            let cloned_weak_self = weak_self.clone();
+            let on_message = Closure::new(move |event: MessageEvent| {
+                if let Some(message) = event.data().as_string() {
+                    if message == "*handshake" {
+                        #[cfg(feature = "log")]
+                        log::info!("received handshake from server");
+
+                        let Some(client) = Weak::upgrade(&cloned_weak_self) else {
+                            #[cfg(feature = "log")]
+                            log::error!("failed to upgrade weak client in message callback");
+                            return;
+                        };
+
+                        // Contain the borrow to a smaller scope so that the callbacks aren't called until
+                        // after we drop it
+                        let on_ready = {
+                            let Ok(mut client) = client.try_borrow_mut() else {
+                                #[cfg(feature = "log")]
+                                log::error!("failed to borrow client in message callback");
+                                return;
+                            };
+
+                            client.server_ready = true;
+                            client.on_ready.drain(..).collect::<Vec<_>>()
+                        };
+
+                        for on_ready in on_ready {
+                            if let Err(error) = on_ready.call0(&JsValue::NULL) {
+                                #[cfg(feature = "log")]
+                                log::error!("failed to call on_ready callback in message callback: {error:?}");
+                            }
+                        }
+                    }
+                }
             });
 
             #[cfg(feature = "log")]
-            log::info!("Setting onmessage on client");
+            log::info!("setting onmessage on client");
             worker.set_onmessage(Some(on_message.as_ref().unchecked_ref()));
 
             #[cfg(feature = "log")]
-            log::info!("Sending hello to server");
-            worker.post_message(&Array::of1(&JsValue::from_str("hello from client")));
+            log::info!("sending handshake to server");
+            if let Err(error) = worker.post_message(&Array::of1(&JsValue::from_str("*handshake"))) {
+                #[cfg(feature = "log")]
+                log::error!("error sending handshake: {error:?}");
+            }
 
             RefCell::new(Self {
                 weak_self: weak_self.clone(),
                 on_message,
                 worker,
                 server_ready: false,
+                on_ready: Vec::new(),
             })
-        });
-
-        client
+        })
     }
 
-    pub async fn send_message<T>(worker: Worker, mut message: Message) -> Result<T, Error>
+    pub fn wait_for_server(&mut self) -> Box<dyn Future<Output = ()> + Unpin> {
+        if self.server_ready {
+            return Box::new(ready(()));
+        }
+
+        let mut on_ready = None;
+        let promise = Promise::new(&mut |resolve, _reject| {
+            on_ready = Some(resolve);
+        });
+
+        if let Some(on_ready) = on_ready {
+            self.on_ready.push(on_ready)
+        }
+
+        let future = JsFuture::from(promise).map(|result| {
+            result.map_or_else(
+                |error| {
+                    #[cfg(feature = "log")]
+                    log::error!("error in wait_for_server future: {error:?}");
+                },
+                |_| (),
+            )
+        });
+
+        return Box::new(future);
+    }
+
+    pub fn send_message<T>(
+        &mut self,
+        mut message: Message,
+    ) -> Result<impl Future<Output = Result<T, Error>>, Error>
     where
-        T: Post + std::fmt::Debug,
+        T: Post,
     {
         let channel = MessageChannel::new().map_err(|error| Error::CreationFailed {
             type_name: String::from("MessageChannel"),
@@ -65,18 +135,19 @@ impl Client {
 
         message.transfer(channel.port1());
         message.send(|message, transfer| {
-            worker
+            self.worker
                 .post_message_with_transfer(message, transfer)
                 .map_err(|error| Error::PostFailed {
                     error: format!("{error:?}"),
                 })
         })?;
 
-        JsFuture::from(promise)
-            .await
-            .map_err(|error| Error::ReceiveFailed {
-                error: format!("{error:?}"),
-            })
-            .and_then(|result| T::from_js_value(result))
+        Ok(JsFuture::from(promise).map(|result| {
+            result
+                .map_err(|error| Error::ReceiveFailed {
+                    error: format!("{error:?}"),
+                })
+                .and_then(|result| T::from_js_value(result))
+        }))
     }
 }

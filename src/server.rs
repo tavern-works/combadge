@@ -28,29 +28,46 @@ impl Server {
             let on_message = Closure::new(move |event: MessageEvent| {
                 let Some(server) = Weak::upgrade(&cloned_weak_self) else {
                     #[cfg(feature = "log")]
-                    log::error!("Failed to upgrade weak server in message callback");
+                    log::error!("failed to upgrade weak server in message callback");
                     return;
                 };
 
                 let Ok(mut server) = server.try_borrow_mut() else {
                     #[cfg(feature = "log")]
-                    log::error!("Failed to borrow server in message callback");
+                    log::error!("failed to borrow server in message callback");
                     return;
                 };
 
-                if let Err(error) = server.dispatch(event) {
+                let data: Array = event.data().into();
+                let procedure = data.shift().as_string().unwrap();
+
+                if procedure == "*handshake" {
                     #[cfg(feature = "log")]
-                    log::error!("error while dispatching message: {error}");
+                    log::info!("received handshake from client, returning handshake");
+
+                    if let Err(error) = server.scope.post_message(&JsValue::from_str("*handshake"))
+                    {
+                        #[cfg(feature = "log")]
+                        log::error!("error sending handshake: {error:?}");
+                    }
+                } else {
+                    if let Err(error) = (server.dispatcher)(&procedure, data) {
+                        #[cfg(feature = "log")]
+                        log::error!("error dispatching {procedure}: {error}");
+                    }
                 }
             });
 
             #[cfg(feature = "log")]
-            log::info!("Setting onmessage on server");
+            log::info!("setting onmessage on server");
             scope.set_onmessage(Some(on_message.as_ref().unchecked_ref()));
 
             #[cfg(feature = "log")]
-            log::info!("Sending hello to client");
-            scope.post_message(&JsValue::from_str("hello from server"));
+            log::info!("sending handshake to client");
+            if let Err(error) = scope.post_message(&JsValue::from_str("*handshake")) {
+                #[cfg(feature = "log")]
+                log::error!("error sending handshake: {error:?}");
+            }
 
             RefCell::new(Self {
                 weak_self: weak_self.clone(),
@@ -60,14 +77,5 @@ impl Server {
                 client_ready: false,
             })
         })
-    }
-
-    pub fn dispatch(&mut self, message: MessageEvent) -> Result<(), Error> {
-        #[cfg(feature = "log")]
-        log::info!("Server received message: {message:?} {:?}", message.data());
-
-        let data: Array = message.data().into();
-        let procedure = data.shift().as_string().unwrap();
-        (self.dispatcher)(&procedure, data)
     }
 }
