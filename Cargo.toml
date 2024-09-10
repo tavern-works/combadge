@@ -7,8 +7,17 @@ description = "Combadge makes Rust Web Workers easy"
 repository = "https://github.com/tavern-works/combadge"
 license = "MIT"
 
+[features]
+default = ["log"]
+
 [dependencies]
 combadge_macros = { path = "./combadge_macros" }
+log = { version = "0.4", optional = true }
+wasm-bindgen = "0.2"
+
+[dependencies.web-sys]
+version = "0.3"
+features = ["DedicatedWorkerGlobalScope", "MessageEvent", "Worker"]
 
 [lints.clippy]
 all = { level = "deny", priority = -2 }
