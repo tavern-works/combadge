@@ -111,13 +111,11 @@ impl Client {
         future.right_future()
     }
 
-    pub fn send_message<T>(
+    fn send_core<T>(
         &mut self,
         mut message: Message,
-    ) -> impl Future<Output = Result<T, Error>>
-    where
-        T: Post + Sized + 'static,
-    {
+        deserialize: impl FnOnce(JsValue) -> Result<T, Error>,
+    ) -> impl Future<Output = Result<T, Error>> {
         let channel = MessageChannel::new().map_err(|error| Error::CreationFailed {
             type_name: String::from("MessageChannel"),
             error: format!("{error:?}"),
@@ -154,11 +152,25 @@ impl Client {
                         .map_err(|error| Error::ReceiveFailed {
                             error: format!("{error:?}"),
                         })
-                        .and_then(|result| T::from_js_value(result))
+                        .and_then(|result| deserialize(result))
                 })
             })
         }
         .try_flatten()
         .into_future()
+    }
+
+    pub fn send_message<T>(&mut self, message: Message) -> impl Future<Output = Result<T, Error>>
+    where
+        T: Post + Sized + 'static,
+    {
+        self.send_core(message, |result| T::from_js_value(result))
+    }
+
+    pub fn send_wrapped_message<T, E>(
+        &mut self,
+        message: Message,
+    ) -> impl Future<Output = Result<crate::Result<T, E>, Error>> {
+        self.send_core(message, |result| crate::Result::from_js_value(result))
     }
 }

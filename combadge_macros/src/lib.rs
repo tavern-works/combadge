@@ -2,7 +2,7 @@ extern crate proc_macro;
 use proc_macro::TokenStream;
 
 use quote::{format_ident, quote};
-use syn::{parse_macro_input, FnArg, ItemTrait, Pat, ReturnType, TraitItem};
+use syn::{parse_macro_input, FnArg, ItemTrait, Pat, ReturnType, TraitItem, Type};
 
 #[proc_macro_attribute]
 pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -76,11 +76,67 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
         })
         .collect::<Vec<_>>();
 
-    let result = functions
+    let output = functions
         .iter()
-        .map(|function| match &function.sig.output {
+        .map(|function| function.sig.output.clone())
+        .collect::<Vec<_>>();
+
+    let return_type = output
+        .iter()
+        .map(|output| match output {
+            ReturnType::Default => quote! { {} },
+            ReturnType::Type(_, t) => quote! { #t },
+        })
+        .collect::<Vec<_>>();
+
+    let return_with_error = output
+        .iter()
+        .map(|output| match output {
             ReturnType::Default => quote! { Result<(), ::combadge::Error> },
             ReturnType::Type(_, t) => quote! { Result<#t, ::combadge::Error> },
+        })
+        .collect::<Vec<_>>();
+
+    let return_is_result = output
+        .iter()
+        .map(|output| match output {
+            ReturnType::Default => false,
+            ReturnType::Type(_, t) => match t.as_ref() {
+                Type::Path(type_path) => type_path
+                    .path
+                    .segments
+                    .iter()
+                    .last()
+                    .is_some_and(|last| last.ident == "Result"),
+                _ => false,
+            },
+        })
+        .collect::<Vec<_>>();
+
+    let wrap = return_is_result
+        .iter()
+        .map(|is_result| {
+            if *is_result {
+                quote! { let result = ::combadge::Result::from(result); }
+            } else {
+                quote! {}
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let send = return_is_result
+        .iter()
+        .zip(return_type.iter())
+        .map(|(is_result, return_type)| {
+            if *is_result {
+                quote! {
+                    let message = client.map(|mut client| client.send_wrapped_message(message));
+                }
+            } else {
+                quote! {
+                    let message = client.map(|mut client| client.send_message::<#return_type>(message));
+                }
+            }
         })
         .collect::<Vec<_>>();
 
@@ -98,7 +154,7 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
             #(
                 #[expect(clippy::future_not_send)]
-                pub fn #name(#(#argument),*) -> impl std::future::Future<Output = #result> {
+                pub fn #name(#(#argument),*) -> impl std::future::Future<Output = #return_with_error> {
                     use ::combadge::reexports::futures::future::FutureExt;
                     use ::combadge::reexports::futures::future::TryFutureExt;
 
@@ -127,8 +183,11 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
                             let client = client_clone
                                 .try_borrow_mut()
                                 .map_err(|_| ::combadge::Error::ClientUnavailable);
-                            let message = client.map(|mut client| client.send_message(message));
-                            async { message }.try_flatten()
+                            #send
+                            async { message }.try_flatten().map(|result| {
+                                let result: #return_with_error = result.map(std::convert::Into::into);
+                                result
+                            })
                         })
                     })
                 }
@@ -165,6 +224,7 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
                         let #non_receiver = ::combadge::Post::from_js_value(data.shift())?;
                     )*
                     let result = local.#name(#(#non_receiver_name),*);
+                    #wrap
                     let port: ::combadge::reexports::web_sys::MessagePort = data.shift().into();
                     port.post_message(&::combadge::Post::to_js_value(result)?).map_err(|error| ::combadge::Error::PostFailed{ error: format!("{error:?}")})
                 }
