@@ -132,7 +132,7 @@ impl Client {
                     .set_onmessage(Some(callback.as_ref().unchecked_ref()));
             });
 
-            message.transfer(channel.port1()).and_then(|()| {
+            message.post(channel.port1()).and_then(|()| {
                 message
                     .send(|message, transfer| {
                         self.worker

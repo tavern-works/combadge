@@ -8,6 +8,7 @@ use wasm_bindgen::prelude::*;
 use js_sys::Reflect;
 #[cfg(feature = "experimental_shared_memory")]
 use wasm_bindgen::convert::RefFromWasmAbi;
+use web_sys::MessagePort;
 
 use crate::Error;
 
@@ -150,6 +151,18 @@ where
     }
 }
 
+pub trait Transfer {
+    const NEEDS_TRANSFER: bool;
+}
+
+impl<T> Transfer for T {
+    default const NEEDS_TRANSFER: bool = false;
+}
+
+impl Transfer for MessagePort {
+    const NEEDS_TRANSFER: bool = true;
+}
+
 pub struct Message {
     message: Vec<JsValue>,
     transfer: Vec<JsValue>,
@@ -165,19 +178,14 @@ impl Message {
 
     pub fn post<T>(&mut self, message: T) -> Result<(), Error>
     where
-        T: Post,
+        T: Post + Transfer,
     {
-        self.message.push(message.to_js_value()?);
-        Ok(())
-    }
-
-    pub fn transfer<T>(&mut self, message: T) -> Result<(), Error>
-    where
-        T: Post + Clone,
-    {
+        log::info!("posting {} {}", type_name::<T>(), <T as Transfer>::NEEDS_TRANSFER);
         let post = message.to_js_value()?;
         self.message.push(post.clone());
-        self.transfer.push(post);
+        if <T as Transfer>::NEEDS_TRANSFER {
+            self.transfer.push(post)
+        }
         Ok(())
     }
 
@@ -185,6 +193,7 @@ impl Message {
     where
         T: FnOnce(&JsValue, &JsValue) -> Result<(), Error>,
     {
+        log::info!("sending {:?} {:?}", self.message, self.transfer);
         let message = self.message.into_iter().collect::<Array>();
         let transfer = self.transfer.into_iter().collect::<Array>();
         sender(message.as_ref(), transfer.as_ref())

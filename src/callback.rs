@@ -10,6 +10,7 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{MessageChannel, MessageEvent, MessagePort};
 
+use crate::message::Transfer;
 use crate::{Error, Message, Post};
 
 type AsyncReturn<R> = Box<dyn Future<Output = R>>;
@@ -140,10 +141,9 @@ impl<A: 'static, R: 'static> CallbackServer<A, R> {
         message.send(|message, transfer| {
             self.port
                 .post_message_with_transferable(message, transfer)
-                .map_err(|error| {
-                    Error::CallbackFailed {
+                .map_err(|error| Error::CallbackFailed {
                     error: format!("failed to post message: {error:?}"),
-                }})
+                })
         });
 
         Box::new(JsFuture::from(promise).map(|result| {
@@ -248,6 +248,10 @@ impl<A: 'static, R: 'static> Post for Callback1<A, R> {
         log::info!("returning {result:?}");
         result
     }
+}
+
+impl<A, R> Transfer for Callback1<A, R> {
+    const NEEDS_TRANSFER: bool = true;
 }
 
 // impl<T: Responder + 'static> Into<JsValue> for Callback1<T> {
