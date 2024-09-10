@@ -95,6 +95,7 @@ where
         let instance_ref = unsafe { T::ref_from_abi(ptr) };
         let cloned = instance_ref.clone();
 
+        #[cfg(feature = "log")]
         log::info!("got {cloned:?}");
 
         Ok(instance_ref.clone())
@@ -114,6 +115,7 @@ where
                 error: String::from("failed to convert __wbg_ptr to f64"),
             })? as u32;
 
+        #[cfg(feature = "log")]
         log::info!("serializing {ptr}");
 
         Ok(value)
@@ -180,7 +182,6 @@ impl Message {
     where
         T: Post + Transfer,
     {
-        log::info!("posting {} {}", type_name::<T>(), <T as Transfer>::NEEDS_TRANSFER);
         let post = message.to_js_value()?;
         self.message.push(post.clone());
         if <T as Transfer>::NEEDS_TRANSFER {
@@ -193,7 +194,6 @@ impl Message {
     where
         T: FnOnce(&JsValue, &JsValue) -> Result<(), Error>,
     {
-        log::info!("sending {:?} {:?}", self.message, self.transfer);
         let message = self.message.into_iter().collect::<Array>();
         let transfer = self.transfer.into_iter().collect::<Array>();
         sender(message.as_ref(), transfer.as_ref())

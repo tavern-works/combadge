@@ -42,9 +42,6 @@ impl Server {
                 let procedure = data.shift().as_string().unwrap();
 
                 if procedure == "*handshake" {
-                    #[cfg(feature = "log")]
-                    log::info!("received handshake from client, returning handshake");
-
                     if let Err(error) = server.scope.post_message(&JsValue::from_str("*handshake"))
                     {
                         #[cfg(feature = "log")]
@@ -58,12 +55,8 @@ impl Server {
                 }
             });
 
-            #[cfg(feature = "log")]
-            log::info!("setting onmessage on server");
             scope.set_onmessage(Some(on_message.as_ref().unchecked_ref()));
 
-            #[cfg(feature = "log")]
-            log::info!("sending handshake to client");
             if let Err(error) = scope.post_message(&JsValue::from_str("*handshake")) {
                 #[cfg(feature = "log")]
                 log::error!("error sending handshake: {error:?}");

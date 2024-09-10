@@ -31,9 +31,6 @@ impl Client {
             let on_message = Closure::new(move |event: MessageEvent| {
                 if let Some(message) = event.data().as_string() {
                     if message == "*handshake" {
-                        #[cfg(feature = "log")]
-                        log::info!("received handshake from server");
-
                         let Some(client) = Weak::upgrade(&cloned_weak_self) else {
                             #[cfg(feature = "log")]
                             log::error!("failed to upgrade weak client in message callback");
@@ -63,12 +60,8 @@ impl Client {
                 }
             });
 
-            #[cfg(feature = "log")]
-            log::info!("setting onmessage on client");
             worker.set_onmessage(Some(on_message.as_ref().unchecked_ref()));
 
-            #[cfg(feature = "log")]
-            log::info!("sending handshake to server");
             if let Err(error) = worker.post_message(&Array::of1(&JsValue::from_str("*handshake"))) {
                 #[cfg(feature = "log")]
                 log::error!("error sending handshake: {error:?}");
