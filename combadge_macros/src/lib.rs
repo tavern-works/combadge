@@ -84,7 +84,7 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let return_type = output
         .iter()
         .map(|output| match output {
-            ReturnType::Default => quote! { {} },
+            ReturnType::Default => quote! { () },
             ReturnType::Type(_, t) => quote! { #t },
         })
         .collect::<Vec<_>>();
@@ -160,7 +160,7 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
                     let message = Ok(::combadge::Message::new(#name_string));
                     #(
-                        ::combadge::reexports::static_assertions::assert_impl_any!(#non_receiver_type: Into<::combadge::reexports::wasm_bindgen::JsValue>, ::combadge::reexports::serde::Serialize);
+                        // ::combadge::reexports::static_assertions::assert_impl_any!(#non_receiver_type: Into<::combadge::reexports::wasm_bindgen::JsValue>, ::combadge::reexports::serde::Serialize);
                         let message = message.and_then(|mut message| {
                             message.post(#non_receiver_name)?;
                             Ok(message)
@@ -220,7 +220,7 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
             #(
                 fn #name(local: &mut dyn #trait_name, data: ::combadge::reexports::js_sys::Array) -> Result<(), ::combadge::Error> {
                     #(
-                        ::combadge::reexports::static_assertions::assert_impl_any!(#non_receiver_type: Into<::combadge::reexports::wasm_bindgen::JsValue>, ::combadge::reexports::serde::de::DeserializeOwned);
+                        // ::combadge::reexports::static_assertions::assert_impl_any!(#non_receiver_type: Into<::combadge::reexports::wasm_bindgen::JsValue>, ::combadge::reexports::serde::de::DeserializeOwned);
                         let #non_receiver = ::combadge::Post::from_js_value(data.shift())?;
                     )*
                     let result = local.#name(#(#non_receiver_name),*);

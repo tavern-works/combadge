@@ -27,6 +27,7 @@ wasm-bindgen-futures = "0.4"
 version = "0.3"
 features = [
     "DedicatedWorkerGlobalScope",
+    "DomException",
     "MessageChannel",
     "MessageEvent",
     "MessagePort",

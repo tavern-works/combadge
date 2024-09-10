@@ -1,9 +1,12 @@
 #![allow(incomplete_features)]
+#![feature(result_flattening)]
 #![feature(specialization)]
 
 extern crate combadge_macros;
 pub use combadge_macros::combadge;
 
+mod callback;
+pub use callback::{AsyncClosure, Callback1};
 mod client;
 pub use client::Client;
 mod error;

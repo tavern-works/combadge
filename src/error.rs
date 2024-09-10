@@ -2,6 +2,9 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum Error {
+    #[error("callback failed")]
+    CallbackFailed { error: String },
+
     #[error("client unavailable")]
     ClientUnavailable,
 
