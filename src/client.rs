@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::future::{ready, Future};
 use std::rc::{Rc, Weak};
 
-use futures::FutureExt;
+use futures::{FutureExt, TryFutureExt};
 use js_sys::{Array, Function, Promise};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
@@ -84,9 +84,9 @@ impl Client {
         })
     }
 
-    pub fn wait_for_server(&mut self) -> Box<dyn Future<Output = ()> + Unpin> {
+    pub fn wait_for_server(&mut self) -> impl Future<Output = ()> {
         if self.server_ready {
-            return Box::new(ready(()));
+            return ready(()).left_future();
         }
 
         let mut on_ready = None;
@@ -108,46 +108,57 @@ impl Client {
             )
         });
 
-        return Box::new(future);
+        future.right_future()
     }
 
     pub fn send_message<T>(
         &mut self,
         mut message: Message,
-    ) -> Result<impl Future<Output = Result<T, Error>>, Error>
+    ) -> impl Future<Output = Result<T, Error>>
     where
-        T: Post,
+        T: Post + Sized + 'static,
     {
         let channel = MessageChannel::new().map_err(|error| Error::CreationFailed {
             type_name: String::from("MessageChannel"),
             error: format!("{error:?}"),
-        })?;
-
-        let promise = Promise::new(&mut |resolve, _reject| {
-            let callback = Closure::once_into_js(move |message: MessageEvent| {
-                let _ = resolve.call1(&JsValue::NULL, &message.data());
-            });
-
-            channel
-                .port2()
-                .set_onmessage(Some(callback.as_ref().unchecked_ref()));
         });
 
-        message.transfer(channel.port1())?;
-        message.send(|message, transfer| {
-            self.worker
-                .post_message_with_transfer(message, transfer)
-                .map_err(|error| Error::PostFailed {
-                    error: format!("{error:?}"),
-                })
-        })?;
+        let promise = channel.and_then(|channel| {
+            let promise = Promise::new(&mut |resolve, _reject| {
+                let callback = Closure::once_into_js(move |message: MessageEvent| {
+                    let _ = resolve.call1(&JsValue::NULL, &message.data());
+                });
 
-        Ok(JsFuture::from(promise).map(|result| {
-            result
-                .map_err(|error| Error::ReceiveFailed {
-                    error: format!("{error:?}"),
+                channel
+                    .port2()
+                    .set_onmessage(Some(callback.as_ref().unchecked_ref()));
+            });
+
+            message.transfer(channel.port1()).and_then(|()| {
+                message
+                    .send(|message, transfer| {
+                        self.worker
+                            .post_message_with_transfer(message, transfer)
+                            .map_err(|error| Error::PostFailed {
+                                error: format!("{error:?}"),
+                            })
+                    })
+                    .and_then(|()| Ok(promise))
+            })
+        });
+
+        async {
+            promise.map(|promise| {
+                JsFuture::from(promise).map(|result| {
+                    result
+                        .map_err(|error| Error::ReceiveFailed {
+                            error: format!("{error:?}"),
+                        })
+                        .and_then(|result| T::from_js_value(result))
                 })
-                .and_then(|result| T::from_js_value(result))
-        }))
+            })
+        }
+        .try_flatten()
+        .into_future()
     }
 }

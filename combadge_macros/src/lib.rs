@@ -97,18 +97,40 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
             }
 
             #(
-                pub fn #name(#(#argument),*) -> core::result::Result<impl std::future::Future<Output = #result>, ::combadge::Error> {
-                    let mut message = ::combadge::Message::new(#name_string);
+                #[expect(clippy::future_not_send)]
+                pub fn #name(#(#argument),*) -> impl std::future::Future<Output = #result> {
+                    use ::combadge::reexports::futures::future::FutureExt;
+                    use ::combadge::reexports::futures::future::TryFutureExt;
+
+                    let message = Ok(::combadge::Message::new(#name_string));
                     #(
                         ::combadge::reexports::static_assertions::assert_impl_any!(#non_receiver_type: Into<wasm_bindgen::JsValue>, serde::Serialize);
-                        message.post(#non_receiver_name)?;
+                        let message = message.and_then(|mut message| {
+                            message.post(#non_receiver_name)?;
+                            Ok(message)
+                        });
                     )*
-                    let server_ready = self.client.try_borrow_mut().map_err(|_| ::combadge::Error::ClientUnavailable)?.wait_for_server();
-                    async {
-                        server_ready.await;
+
+                    let server_ready = match self
+                        .client
+                        .try_borrow_mut()
+                        .map_err(|_| ::combadge::Error::ClientUnavailable)
+                    {
+                        Ok(mut client) => client.wait_for_server().map(|()| Ok(())).left_future(),
+                        Err(error) => async { Err(error) }.right_future(),
                     };
-                    let send_message = self.client.try_borrow_mut().map_err(|_| ::combadge::Error::ClientUnavailable)?.send_message(message)?;
-                    Ok(send_message)
+
+                    let client_clone = self.client.clone();
+                    server_ready.then(move |result| {
+                        let message = result.and(message);
+                        async { message }.and_then(move |message| {
+                            let client = client_clone
+                                .try_borrow_mut()
+                                .map_err(|_| ::combadge::Error::ClientUnavailable);
+                            let message = client.map(|mut client| client.send_message(message));
+                            async { message }.try_flatten()
+                        })
+                    })
                 }
             )*
         }
