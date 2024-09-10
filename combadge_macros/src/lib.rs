@@ -104,7 +104,7 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
                     let message = Ok(::combadge::Message::new(#name_string));
                     #(
-                        ::combadge::reexports::static_assertions::assert_impl_any!(#non_receiver_type: Into<wasm_bindgen::JsValue>, serde::Serialize);
+                        ::combadge::reexports::static_assertions::assert_impl_any!(#non_receiver_type: Into<::combadge::reexports::wasm_bindgen::JsValue>, ::combadge::reexports::serde::Serialize);
                         let message = message.and_then(|mut message| {
                             message.post(#non_receiver_name)?;
                             Ok(message)
@@ -159,13 +159,13 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
             }
 
             #(
-                fn #name(local: &mut dyn #trait_name, data: js_sys::Array) -> Result<(), ::combadge::Error> {
+                fn #name(local: &mut dyn #trait_name, data: ::combadge::reexports::js_sys::Array) -> Result<(), ::combadge::Error> {
                     #(
-                        ::combadge::reexports::static_assertions::assert_impl_any!(#non_receiver_type: Into<wasm_bindgen::JsValue>, serde::de::DeserializeOwned);
+                        ::combadge::reexports::static_assertions::assert_impl_any!(#non_receiver_type: Into<::combadge::reexports::wasm_bindgen::JsValue>, ::combadge::reexports::serde::de::DeserializeOwned);
                         let #non_receiver = ::combadge::Post::from_js_value(data.shift())?;
                     )*
                     let result = local.#name(#(#non_receiver_name),*);
-                    let port: web_sys::MessagePort = data.shift().into();
+                    let port: ::combadge::reexports::web_sys::MessagePort = data.shift().into();
                     port.post_message(&::combadge::Post::to_js_value(result)?).map_err(|error| ::combadge::Error::PostFailed{ error: format!("{error:?}")})
                 }
             )*
