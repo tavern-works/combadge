@@ -1,14 +1,16 @@
 [package]
-name = "combadge"
+name = "combadge_macros"
 version = "0.1.0"
 authors = ["Dan Stoza <stoza@periapt.media>"]
 edition = "2021"
-description = "Combadge makes Rust Web Workers easy"
+description = "Macros for Combadge"
 repository = "https://github.com/tavern-works/combadge"
 license = "MIT"
 
+[lib]
+crate-type = ["proc-macro"]
+
 [dependencies]
-combadge_macros = { path = "./combadge_macros" }
 
 [lints.clippy]
 all = { level = "deny", priority = -2 }
