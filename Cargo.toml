@@ -9,6 +9,7 @@ license = "MIT"
 
 [features]
 default = ["log"]
+experimental_shared_memory = []
 
 [dependencies]
 combadge_macros = { path = "./combadge_macros" }

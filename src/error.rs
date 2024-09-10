@@ -22,4 +22,7 @@ pub enum Error {
 
     #[error("unknown procedure {name}")]
     UnknownProcedure { name: String },
+
+    #[error("unsupported type {name} (types need to either be Into<JsValue> and From<JsValue> or [de]serializable with serde)")]
+    UnsupportedType { name: String },
 }

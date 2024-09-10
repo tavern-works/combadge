@@ -97,15 +97,18 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
             }
 
             #(
-                pub async fn #name(#(#argument),*) -> #result {
+                pub fn #name(#(#argument),*) -> core::result::Result<impl std::future::Future<Output = #result>, ::combadge::Error> {
                     let mut message = ::combadge::Message::new(#name_string);
                     #(
+                        ::combadge::reexports::static_assertions::assert_impl_any!(#non_receiver_type: Into<wasm_bindgen::JsValue>, serde::Serialize);
                         message.post(#non_receiver_name)?;
                     )*
                     let server_ready = self.client.try_borrow_mut().map_err(|_| ::combadge::Error::ClientUnavailable)?.wait_for_server();
-                    server_ready.await;
+                    async {
+                        server_ready.await;
+                    };
                     let send_message = self.client.try_borrow_mut().map_err(|_| ::combadge::Error::ClientUnavailable)?.send_message(message)?;
-                    send_message.await
+                    Ok(send_message)
                 }
             )*
         }
@@ -136,7 +139,7 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
             #(
                 fn #name(local: &mut dyn #trait_name, data: js_sys::Array) -> Result<(), ::combadge::Error> {
                     #(
-                        static_assertions::assert_impl_any!(#non_receiver_type: Into<wasm_bindgen::JsValue>, serde::Serialize);
+                        ::combadge::reexports::static_assertions::assert_impl_any!(#non_receiver_type: Into<wasm_bindgen::JsValue>, serde::de::DeserializeOwned);
                         let #non_receiver = ::combadge::Post::from_js_value(data.shift())?;
                     )*
                     let result = local.#name(#(#non_receiver_name),*);
