@@ -12,9 +12,9 @@ pub use client::Client;
 mod error;
 pub use error::Error;
 mod message;
-pub use message::{Message, Post};
-mod result;
-pub use result::Result;
+pub use message::Message;
+mod post;
+pub use post::{Post, Transfer};
 mod server;
 pub use server::Server;
 
@@ -27,6 +27,6 @@ pub mod reexports {
 }
 
 pub mod prelude {
-    pub use crate::combadge;
     pub use crate::callback::{Call1, Call2, Callback};
+    pub use crate::combadge;
 }

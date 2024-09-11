@@ -10,8 +10,8 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{MessageChannel, MessageEvent, MessagePort};
 
-use crate::message::{PostTuple, Transfer};
-use crate::{Error, Message, Post};
+use crate::message::PostTuple;
+use crate::{Error, Message, Post, Transfer};
 
 type AsyncReturn<R> = Box<dyn Future<Output = R>>;
 type AsyncReturnWithError<R> = Box<dyn Future<Output = Result<R, Error>>>;

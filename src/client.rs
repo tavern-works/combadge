@@ -8,8 +8,7 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{MessageChannel, MessageEvent, Worker};
 
-use crate::message::Post;
-use crate::{Error, Message};
+use crate::{Error, Message, Post};
 
 #[derive(Debug)]
 pub struct Client {
@@ -104,10 +103,9 @@ impl Client {
         future.right_future()
     }
 
-    fn send_core<T>(
+    pub fn send_message<T>(
         &mut self,
         mut message: Message,
-        deserialize: impl FnOnce(JsValue) -> Result<T, Error>,
     ) -> impl Future<Output = Result<T, Error>> {
         let channel = MessageChannel::new().map_err(|error| Error::CreationFailed {
             type_name: String::from("MessageChannel"),
@@ -145,25 +143,11 @@ impl Client {
                         .map_err(|error| Error::ReceiveFailed {
                             error: format!("{error:?}"),
                         })
-                        .and_then(|result| deserialize(result))
+                        .and_then(|result| T::from_js_value(result))
                 })
             })
         }
         .try_flatten()
         .into_future()
-    }
-
-    pub fn send_message<T>(&mut self, message: Message) -> impl Future<Output = Result<T, Error>>
-    where
-        T: Post + Sized + 'static,
-    {
-        self.send_core(message, |result| T::from_js_value(result))
-    }
-
-    pub fn send_wrapped_message<T, E>(
-        &mut self,
-        message: Message,
-    ) -> impl Future<Output = Result<crate::Result<T, E>, Error>> {
-        self.send_core(message, |result| crate::Result::from_js_value(result))
     }
 }
