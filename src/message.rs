@@ -13,11 +13,14 @@ use web_sys::MessagePort;
 use crate::Error;
 
 trait SerdePost: Sized {
+    const POSTABLE: bool;
     fn from_js_value(value: JsValue) -> Result<Self, Error>;
     fn to_js_value(&self) -> Result<JsValue, Error>;
 }
 
 impl<T> SerdePost for T {
+    default const POSTABLE: bool = false;
+
     default fn from_js_value(_value: JsValue) -> Result<Self, Error> {
         Err(Error::UnsupportedType {
             name: String::from(type_name::<T>()),
@@ -35,6 +38,8 @@ impl<T> SerdePost for T
 where
     T: DeserializeOwned + Serialize,
 {
+    const POSTABLE: bool = true;
+
     fn from_js_value(value: JsValue) -> Result<Self, Error> {
         serde_wasm_bindgen::from_value(value).map_err(|error| {
             #[cfg(feature = "log")]
@@ -58,11 +63,14 @@ where
 }
 
 pub trait WasmPost: Sized {
+    const POSTABLE: bool;
     fn from_js_value(value: JsValue) -> Result<Self, Error>;
     fn to_js_value(self) -> Result<JsValue, Error>;
 }
 
 impl<T> WasmPost for T {
+    const POSTABLE: bool = <T as SerdePost>::POSTABLE;
+
     default fn from_js_value(value: JsValue) -> Result<Self, Error> {
         SerdePost::from_js_value(value)
     }
@@ -123,6 +131,7 @@ where
 }
 
 pub trait Post: Sized {
+    const POSTABLE: bool;
     fn from_js_value(value: JsValue) -> Result<Self, Error>;
     fn to_js_value(self) -> Result<JsValue, Error>;
 }
@@ -131,6 +140,8 @@ impl<T> Post for T
 where
     T: Sized,
 {
+    default const POSTABLE: bool = <T as WasmPost>::POSTABLE;
+
     default fn from_js_value(value: JsValue) -> Result<Self, Error> {
         WasmPost::from_js_value(value)
     }
@@ -144,6 +155,8 @@ impl<T> Post for T
 where
     T: Into<JsValue> + From<JsValue>,
 {
+    const POSTABLE: bool = true;
+
     fn from_js_value(value: JsValue) -> Result<Self, Error> {
         Ok(value.into())
     }
@@ -184,7 +197,7 @@ impl Message {
     {
         let post = message.to_js_value()?;
         self.message.push(post.clone());
-        if <T as Transfer>::NEEDS_TRANSFER {
+        if T::NEEDS_TRANSFER {
             self.transfer.push(post)
         }
         Ok(())

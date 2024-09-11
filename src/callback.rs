@@ -220,6 +220,8 @@ impl<A, R> From<Box<dyn Fn(A) -> AsyncReturnWithError<R>>> for Callback1<A, R> {
 // }
 
 impl<A: 'static, R: 'static> Post for Callback1<A, R> {
+    const POSTABLE: bool = true;
+
     fn from_js_value(value: JsValue) -> Result<Self, Error> {
         let server = CallbackServer::new(value.into());
         Ok(server.to_closure().into())

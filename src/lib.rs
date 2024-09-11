@@ -22,7 +22,6 @@ pub mod reexports {
     pub use ::futures;
     pub use ::js_sys;
     pub use ::serde;
-    pub use ::static_assertions;
     pub use ::wasm_bindgen;
     pub use ::web_sys;
 }
