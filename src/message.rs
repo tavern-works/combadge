@@ -212,3 +212,22 @@ impl Message {
         sender(message.as_ref(), transfer.as_ref())
     }
 }
+
+pub(crate) trait PostTuple<T> {
+    fn post_tuple(&mut self, tuple: T) -> Result<(), Error>;
+}
+
+impl<A> PostTuple<(A,)> for Message {
+    fn post_tuple(&mut self, tuple: (A,)) -> Result<(), Error> {
+        self.post(tuple.0)?;
+        Ok(())
+    }
+}
+
+impl<A, B> PostTuple<(A, B)> for Message {
+    fn post_tuple(&mut self, tuple: (A, B)) -> Result<(), Error> {
+        self.post(tuple.0)?;
+        self.post(tuple.1)?;
+        Ok(())
+    }
+}

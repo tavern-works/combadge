@@ -6,7 +6,7 @@ extern crate combadge_macros;
 pub use combadge_macros::combadge;
 
 mod callback;
-pub use callback::{AsyncClosure, Callback1};
+pub use callback::{AsyncClosure, Call1, Callback};
 mod client;
 pub use client::Client;
 mod error;
@@ -24,4 +24,9 @@ pub mod reexports {
     pub use ::serde;
     pub use ::wasm_bindgen;
     pub use ::web_sys;
+}
+
+pub mod prelude {
+    pub use crate::combadge;
+    pub use crate::callback::{Call1, Call2, Callback};
 }
