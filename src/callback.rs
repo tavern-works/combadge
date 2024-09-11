@@ -4,7 +4,7 @@ use std::future::Future;
 use std::marker::PhantomData;
 use std::rc::{Rc, Weak};
 
-use futures::FutureExt;
+use futures::{FutureExt, TryFutureExt};
 use js_sys::{Array, Promise};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
@@ -161,22 +161,25 @@ where
         });
         self.port.set_onmessage(Some(&on_message.unchecked_ref()));
         let mut message = Message::new("call");
-        message.post_tuple(args);
-        message.send(|message, transfer| {
-            self.port
-                .post_message_with_transferable(message, transfer)
-                .map_err(|error| Error::CallbackFailed {
-                    error: format!("failed to post message: {error:?}"),
-                })
+        let post = message.post_tuple(args).and_then(|()| {
+            message.send(|message, transfer| {
+                self.port
+                    .post_message_with_transferable(message, transfer)
+                    .map_err(|error| Error::CallbackFailed {
+                        error: format!("failed to post message: {error:?}"),
+                    })
+            })
         });
 
-        Box::new(JsFuture::from(promise).map(|result| {
-            result
-                .map(|result| Post::from_js_value(result))
-                .map_err(|error| Error::CallbackFailed {
-                    error: format!("promise rejected: {error:?}"),
-                })
-                .flatten()
+        Box::new(async { post }.and_then(|()| {
+            JsFuture::from(promise).map(|result| {
+                result
+                    .map(|result| Post::from_js_value(result))
+                    .map_err(|error| Error::CallbackFailed {
+                        error: format!("promise rejected: {error:?}"),
+                    })
+                    .flatten()
+            })
         }))
     }
 }
@@ -352,70 +355,3 @@ where
         }
     }
 }
-
-// pub struct Callback1<A, R> {
-//     local: Option<Box<dyn Fn(A) -> R>>,
-//     remote: Option<Box<dyn Fn(A) -> AsyncReturnWithError<R>>>,
-// }
-
-// impl<A, R: 'static> Callback1<A, R> {
-//     pub fn call(&self, a: A) -> AsyncReturnWithError<R> {
-//         if let Some(remote) = &self.remote {
-//             remote(a)
-//         } else if let Some(local) = &self.local {
-//             let response = local(a);
-//             Box::new(async { Ok(response) })
-//         } else {
-//             Box::new(async {
-//                 Err(Error::CallbackFailed {
-//                     error: String::from("remote callback not found"),
-//                 })
-//             })
-//         }
-//     }
-// }
-
-// impl<A, R> From<Box<dyn Fn(A) -> R>> for Callback1<A, R> {
-//     fn from(callback: Box<dyn Fn(A) -> R>) -> Self {
-//         Self {
-//             local: Some(callback),
-//             remote: None,
-//         }
-//     }
-// }
-
-// impl<A, R> From<Box<dyn Fn(A) -> AsyncReturnWithError<R>>> for Callback1<A, R> {
-//     fn from(callback: Box<dyn Fn(A) -> AsyncReturnWithError<R>>) -> Self {
-//         Self {
-//             local: None,
-//             remote: Some(callback),
-//         }
-//     }
-// }
-
-// impl<A: 'static, R: 'static> Post for Callback1<A, R>
-// where
-//     Message: PostTuple<A>,
-// {
-//     const POSTABLE: bool = true;
-
-//     fn from_js_value(value: JsValue) -> Result<Self, Error> {
-//         let server = CallbackServer::new(value.into());
-//         Ok(server.to_closure().into())
-//     }
-
-//     fn to_js_value(self) -> Result<JsValue, Error> {
-//         let Some(local) = self.local else {
-//             return Err(Error::SerializeFailed {
-//                 type_name: String::from(type_name::<Self>()),
-//                 error: String::from("can't serialize callback without a local callback"),
-//             });
-//         };
-
-//         CallbackClient::create(local).map(JsValue::from)
-//     }
-// }
-
-// impl<A, R> Transfer for Callback1<A, R> {
-//     const NEEDS_TRANSFER: bool = true;
-// }

@@ -11,11 +11,13 @@ use crate::Error;
 type Dispatcher = Box<dyn FnMut(&str, Array) -> Result<(), Error>>;
 
 pub struct Server {
-    weak_self: Weak<RefCell<Self>>,
     dispatcher: Dispatcher,
+    #[expect(
+        dead_code,
+        reason = "We hold onto this closure's memory until the server is dropped"
+    )]
     on_message: Closure<dyn Fn(MessageEvent)>,
     scope: DedicatedWorkerGlobalScope,
-    client_ready: bool,
 }
 
 impl Server {
@@ -63,11 +65,9 @@ impl Server {
             }
 
             RefCell::new(Self {
-                weak_self: weak_self.clone(),
                 dispatcher,
                 on_message,
                 scope,
-                client_ready: false,
             })
         })
     }

@@ -12,7 +12,6 @@ use crate::{Error, Message, Post};
 
 #[derive(Debug)]
 pub struct Client {
-    weak_self: Weak<RefCell<Self>>,
     #[expect(
         unused,
         reason = "The closure needs to be held in memory even though it isn't read"
@@ -67,7 +66,6 @@ impl Client {
             }
 
             RefCell::new(Self {
-                weak_self: weak_self.clone(),
                 on_message,
                 worker,
                 server_ready: false,
