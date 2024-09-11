@@ -11,7 +11,7 @@ use wasm_bindgen_futures::JsFuture;
 use web_sys::{MessageChannel, MessageEvent, MessagePort};
 
 use crate::message::PostTuple;
-use crate::{Error, Message, Post, Transfer};
+use crate::{build_responder, Error, Message, Post, Transfer};
 
 type AsyncReturn<R> = Box<dyn Future<Output = R>>;
 type AsyncReturnWithError<R> = Box<dyn Future<Output = Result<R, Error>>>;
@@ -21,48 +21,13 @@ trait Responder {
     fn respond(&self, arguments: Array, port: MessagePort) -> Result<(), Error>;
 }
 
-impl<A, R> Responder for Box<dyn Fn(A) -> R> {
-    fn respond(&self, arguments: Array, port: MessagePort) -> Result<(), Error> {
-        let a: A = Post::from_js_value(arguments.shift())?;
-        let result = Post::to_js_value(self(a))?;
-
-        if R::NEEDS_TRANSFER {
-            port.post_message_with_transferable(&result, &result)
-                .map_err(|error| Error::PostFailed {
-                    error: format!("failed to respond in Responder: {error:?}"),
-                })?;
-        } else {
-            port.post_message(&result)
-                .map_err(|error| Error::PostFailed {
-                    error: format!("failed to respond in Responder: {error:?}"),
-                })?;
-        }
-
-        Ok(())
-    }
-}
-
-impl<A, B, R> Responder for Box<dyn Fn(A, B) -> R> {
-    fn respond(&self, arguments: Array, port: MessagePort) -> Result<(), Error> {
-        let a: A = Post::from_js_value(arguments.shift())?;
-        let b: B = Post::from_js_value(arguments.shift())?;
-        let result = Post::to_js_value(self(a, b))?;
-
-        if R::NEEDS_TRANSFER {
-            port.post_message_with_transferable(&result, &result)
-                .map_err(|error| Error::PostFailed {
-                    error: format!("failed to respond in Responder: {error:?}"),
-                })?;
-        } else {
-            port.post_message(&result)
-                .map_err(|error| Error::PostFailed {
-                    error: format!("failed to respond in Responder: {error:?}"),
-                })?;
-        }
-
-        Ok(())
-    }
-}
+build_responder!(1);
+build_responder!(2);
+build_responder!(3);
+build_responder!(4);
+build_responder!(5);
+build_responder!(6);
+build_responder!(7);
 
 struct CallbackClient {
     /// The client holds a reference to itself so it can keep the Closure alive.

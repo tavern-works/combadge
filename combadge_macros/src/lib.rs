@@ -1,8 +1,67 @@
 extern crate proc_macro;
-use proc_macro::TokenStream;
 
+use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::{parse_macro_input, FnArg, ItemTrait, Pat, ReturnType, TraitItem, Type};
+use syn::{parse, parse_macro_input, FnArg, ItemTrait, LitInt, Pat, ReturnType, TraitItem};
+
+#[proc_macro]
+pub fn build_responder(item: TokenStream) -> TokenStream {
+    let Ok(count) = parse::<LitInt>(item.clone().into()) else {
+        panic!("expected an integer literal");
+    };
+
+    let Ok(count) = count.base10_parse::<usize>() else {
+        panic!("failed to parse {count} as usize");
+    };
+
+    if count == 0 {
+        panic!("must generate at least 1 variable");
+    }
+
+    if count > 26 {
+        panic!("can only generate up to 26 variables without running out of letters");
+    }
+
+    let type_name = (0..count)
+        .map(|i| char::from(b'A' + i as u8))
+        .collect::<Vec<_>>();
+
+    let variable_name = type_name
+        .iter()
+        .map(|t| format_ident!("{}", t.to_ascii_lowercase()))
+        .collect::<Vec<_>>();
+
+    let type_name = type_name
+        .iter()
+        .map(|t| format_ident!("{}", t))
+        .collect::<Vec<_>>();
+
+    quote! {
+        impl<#(#type_name),*, R> Responder for Box<dyn Fn(#(#type_name),*) -> R> {
+            fn respond(&self, arguments: Array, port: MessagePort) -> Result<(), Error> {
+                #(
+                    let #variable_name: #type_name = Post::from_js_value(arguments.shift())?;
+                )*
+                let result = Post::to_js_value(self(#(#variable_name),*))?;
+
+                if R::NEEDS_TRANSFER {
+                    port.post_message_with_transferable(&result, &result)
+                        .map_err(|error| Error::PostFailed {
+                            error: format!("failed to respond in Responder: {error:?}"),
+                        })?;
+                } else {
+                    port.post_message(&result)
+                        .map_err(|error| Error::PostFailed {
+                            error: format!("failed to respond in Responder: {error:?}"),
+                        })?;
+                }
+
+                Ok(())
+            }
+        }
+    }
+    .into()
+}
 
 #[proc_macro_attribute]
 pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
