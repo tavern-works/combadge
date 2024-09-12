@@ -3,29 +3,26 @@ use std::rc::{Rc, Weak};
 
 use js_sys::Array;
 use wasm_bindgen::prelude::*;
-use web_sys::js_sys::global;
-use web_sys::{DedicatedWorkerGlobalScope, MessageEvent};
+use web_sys::MessageEvent;
 
-use crate::Error;
+use crate::{Error, Port};
 
 type Dispatcher = Box<dyn FnMut(&str, Array) -> Result<(), Error>>;
 
-pub struct Server {
+pub struct Server<P: Port> {
+    phylactery: Option<Rc<RefCell<Self>>>,
     dispatcher: Dispatcher,
     #[expect(
         dead_code,
         reason = "We hold onto this closure's memory until the server is dropped"
     )]
     on_message: Closure<dyn Fn(MessageEvent)>,
-    scope: DedicatedWorkerGlobalScope,
+    port: P,
 }
 
-impl Server {
-    pub fn new(dispatcher: Dispatcher) -> Rc<RefCell<Self>> {
-        let global: JsValue = global().into();
-        let scope: DedicatedWorkerGlobalScope = global.into();
-
-        Rc::new_cyclic(|weak_self: &Weak<RefCell<Self>>| {
+impl<P: Port + 'static> Server<P> {
+    pub fn create(port: P, dispatcher: Dispatcher) {
+        let server = Rc::new_cyclic(|weak_self: &Weak<RefCell<Self>>| {
             let cloned_weak_self = weak_self.clone();
             let on_message = Closure::new(move |event: MessageEvent| {
                 let Some(server) = Weak::upgrade(&cloned_weak_self) else {
@@ -44,8 +41,7 @@ impl Server {
                 let procedure = data.shift().as_string().unwrap();
 
                 if procedure == "*handshake" {
-                    if let Err(error) = server.scope.post_message(&JsValue::from_str("*handshake"))
-                    {
+                    if let Err(error) = server.port.post_message(&JsValue::from_str("*handshake")) {
                         #[cfg(feature = "log")]
                         log::error!("error sending handshake: {error:?}");
                     }
@@ -57,18 +53,21 @@ impl Server {
                 }
             });
 
-            scope.set_onmessage(Some(on_message.as_ref().unchecked_ref()));
+            port.set_onmessage(Some(on_message.as_ref().unchecked_ref()));
 
-            if let Err(error) = scope.post_message(&JsValue::from_str("*handshake")) {
+            if let Err(error) = port.post_message(&JsValue::from_str("*handshake")) {
                 #[cfg(feature = "log")]
                 log::error!("error sending handshake: {error:?}");
             }
 
             RefCell::new(Self {
+                phylactery: None,
                 dispatcher,
                 on_message,
-                scope,
+                port,
             })
-        })
+        });
+
+        server.borrow_mut().phylactery = Some(server.clone());
     }
 }

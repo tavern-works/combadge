@@ -3,16 +3,19 @@
 #![feature(specialization)]
 
 extern crate combadge_macros;
-pub use combadge_macros::combadge;
 
 mod callback;
-pub use callback::{AsyncClosure, Call1, Callback};
+pub use callback::{AsyncClosure, Callback};
 mod client;
 pub use client::Client;
 mod error;
 pub use error::Error;
+mod handle;
+pub use handle::{AsHandle, Handle};
 mod message;
 pub use message::Message;
+mod port;
+pub use port::Port;
 mod post;
 pub use post::{Post, Transfer};
 mod server;
@@ -27,6 +30,8 @@ pub mod reexports {
 }
 
 pub mod prelude {
-    pub use crate::callback::{Call1, Call2, Callback};
-    pub use crate::combadge;
+    pub use crate::callback::call_traits::*;
+    pub use crate::callback::Callback;
+    pub use crate::handle::Handle;
+    pub use combadge_macros::{combadge, proxy};
 }

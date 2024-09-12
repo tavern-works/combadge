@@ -215,4 +215,7 @@ impl<Args, Return> Transfer for Callback<Args, Return> {
     const NEEDS_TRANSFER: bool = true;
 }
 
-build_call_traits!(7);
+pub mod call_traits {
+    use super::*;
+    build_call_traits!(7);
+}

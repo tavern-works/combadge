@@ -6,24 +6,24 @@ use futures::{FutureExt, TryFutureExt};
 use js_sys::{Array, Function, Promise};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
-use web_sys::{MessageChannel, MessageEvent, Worker};
+use web_sys::{MessageChannel, MessageEvent};
 
-use crate::{Error, Message, Post};
+use crate::{Error, Message, Port, Post};
 
 #[derive(Debug)]
-pub struct Client {
+pub struct Client<P: Port> {
     #[expect(
         unused,
         reason = "The closure needs to be held in memory even though it isn't read"
     )]
     on_message: Closure<dyn Fn(MessageEvent)>,
-    pub worker: Worker,
+    pub port: P,
     server_ready: bool,
     on_ready: Vec<Function>,
 }
 
-impl Client {
-    pub fn new(worker: Worker) -> Rc<RefCell<Self>> {
+impl<P: Port + 'static> Client<P> {
+    pub fn new(port: P) -> Rc<RefCell<Self>> {
         Rc::new_cyclic(|weak_self: &Weak<RefCell<Self>>| {
             let cloned_weak_self = weak_self.clone();
             let on_message = Closure::new(move |event: MessageEvent| {
@@ -58,16 +58,16 @@ impl Client {
                 }
             });
 
-            worker.set_onmessage(Some(on_message.as_ref().unchecked_ref()));
+            port.set_onmessage(Some(on_message.as_ref().unchecked_ref()));
 
-            if let Err(error) = worker.post_message(&Array::of1(&JsValue::from_str("*handshake"))) {
+            if let Err(error) = port.post_message(&Array::of1(&JsValue::from_str("*handshake"))) {
                 #[cfg(feature = "log")]
                 log::error!("error sending handshake: {error:?}");
             }
 
             RefCell::new(Self {
                 on_message,
-                worker,
+                port,
                 server_ready: false,
                 on_ready: Vec::new(),
             })
@@ -124,10 +124,10 @@ impl Client {
             message.post(channel.port1()).and_then(|()| {
                 message
                     .send(|message, transfer| {
-                        self.worker
+                        self.port
                             .post_message_with_transfer(message, transfer)
                             .map_err(|error| Error::PostFailed {
-                                error: format!("{error:?}"),
+                                error: format!("pmwt {error:?}"),
                             })
                     })
                     .and_then(|()| Ok(promise))
