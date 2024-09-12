@@ -2,7 +2,7 @@ extern crate proc_macro;
 
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::{parse, parse_macro_input, FnArg, Ident, ItemTrait, LitInt, Pat, ReturnType, TraitItem};
+use syn::{parse, parse_macro_input, FnArg, Ident, Index, ItemTrait, LitInt, Pat, ReturnType, TraitItem};
 
 fn parse_count(item: TokenStream) -> usize {
     let Ok(count) = parse::<LitInt>(item.clone().into()) else {
@@ -43,15 +43,138 @@ fn build_variables(count: usize) -> (Vec<Ident>, Vec<Ident>) {
 }
 
 #[proc_macro]
-pub fn build_responders(item: TokenStream) -> TokenStream {
+pub fn build_call_traits(item: TokenStream) -> TokenStream {
     let max_count = parse_count(item);
 
-    let mut responders = quote! {};
+    let mut call_traits = quote! {};
+    for count in 1..=max_count {
+        let (type_name, variable_name) = build_variables(count);
+        let trait_name = format_ident!("Call{}", count);
+
+        call_traits = quote! {
+            #call_traits
+
+            pub trait #trait_name<#(#type_name),*, Return> {
+                fn call(&self, #(#variable_name: #type_name),*) -> AsyncReturnWithError<Return>;
+            }
+            
+            impl<#(#type_name),*, Return: 'static> #trait_name<#(#type_name),*, Return> for Callback<(#(#type_name),*,), Return>
+            where
+                <((#(#type_name),*,), Return) as CallbackTypes>::Local: Fn(#(#type_name),*) -> Return,
+                <((#(#type_name),*,), Return) as CallbackTypes>::Remote: Fn(#(#type_name),*) -> AsyncReturnWithError<Return>,
+            {
+                fn call(&self, #(#variable_name: #type_name),*) -> AsyncReturnWithError<Return> {
+                    if let Some(remote) = &self.remote {
+                        remote(#(#variable_name),*)
+                    } else if let Some(local) = &self.local {
+                        let response = local(#(#variable_name),*);
+                        Box::new(async { Ok(response) })
+                    } else {
+                        Box::new(async {
+                            Err(Error::CallbackFailed {
+                                error: String::from("callbacks (both remote and local) not found"),
+                            })
+                        })
+                    }
+                }
+            }
+        }
+    }
+
+    call_traits.into()
+}
+
+#[proc_macro]
+pub fn build_callback_from_closure(item: TokenStream) -> TokenStream {
+    let max_count = parse_count(item);
+
+    let mut callback_from_closure = quote! {};
+    for count in 1..=max_count {
+        let (type_name, _) = build_variables(count);
+
+        callback_from_closure = quote! {
+            #callback_from_closure
+
+            impl<#(#type_name),*, Return> From<Box<dyn Fn(#(#type_name),*) -> Return>> for Callback<(#(#type_name),*,), Return> {
+                fn from(callback: Box<dyn Fn(#(#type_name),*) -> Return>) -> Self {
+                    Self {
+                        local: Some(callback),
+                        remote: None,
+                    }
+                }
+            }
+            
+            impl<#(#type_name),*, Return> From<Box<dyn Fn(#(#type_name),*) -> AsyncReturnWithError<Return>>> for Callback<(#(#type_name),*,), Return> {
+                fn from(callback: Box<dyn Fn(#(#type_name),*) -> AsyncReturnWithError<Return>>) -> Self {
+                    Self {
+                        local: None,
+                        remote: Some(callback),
+                    }
+                }
+            }
+        }
+    }
+
+    callback_from_closure.into()
+}
+
+#[proc_macro]
+pub fn build_callback_types(item: TokenStream) -> TokenStream {
+    let max_count = parse_count(item);
+
+    let mut callback_types = quote! {};
+    for count in 1..=max_count {
+        let (type_name, _) = build_variables(count);
+
+        callback_types = quote! {
+            #callback_types
+
+            impl<#(#type_name),*, Return> CallbackTypes for ((#(#type_name),*,), Return) {
+                type Local = Box<dyn Fn(#(#type_name),*) -> Return>;
+                type Remote = Box<dyn Fn(#(#type_name),*) -> AsyncReturnWithError<Return>>;
+            }
+        }
+    }
+
+    callback_types.into()
+}
+
+#[proc_macro]
+pub fn build_post_tuple(item: TokenStream) -> TokenStream {
+    let max_count = parse_count(item);
+
+    let mut post_tuple = quote! {};
+    for count in 1..=max_count {
+        let (type_name, _) = build_variables(count);
+        let index = (0..count).map(Index::from).collect::<Vec<_>>();
+
+        post_tuple = quote! {
+            #post_tuple
+
+            impl<#(#type_name),*> PostTuple<(#(#type_name),*,)> for Message {
+                fn post_tuple(&mut self, tuple: (#(#type_name),*,)) -> Result<(), Error> {
+                    #(
+                        self.post(tuple.#index)?;
+                    )*
+                    Ok(())
+                }
+            }
+        }
+    }
+
+    post_tuple.into()
+}
+
+#[proc_macro]
+pub fn build_responder(item: TokenStream) -> TokenStream {
+    let max_count = parse_count(item);
+
+    let mut responder = quote! {};
     for count in 1..=max_count {
         let (type_name, variable_name) = build_variables(count);
 
-        responders = quote! {
-            #responders
+        responder = quote! {
+            #responder
 
             impl<#(#type_name),*, Return> Responder for Box<dyn Fn(#(#type_name),*) -> Return> {
                 fn respond(&self, arguments: Array, port: MessagePort) -> Result<(), Error> {
@@ -59,7 +182,7 @@ pub fn build_responders(item: TokenStream) -> TokenStream {
                         let #variable_name: #type_name = Post::from_js_value(arguments.shift())?;
                     )*
                     let result = Post::to_js_value(self(#(#variable_name),*))?;
-    
+
                     if Return::NEEDS_TRANSFER {
                         port.post_message_with_transferable(&result, &result)
                             .map_err(|error| Error::PostFailed {
@@ -71,14 +194,37 @@ pub fn build_responders(item: TokenStream) -> TokenStream {
                                 error: format!("failed to respond in Responder: {error:?}"),
                             })?;
                     }
-    
+
                     Ok(())
                 }
             }
         }
     }
 
-    responders.into()
+    responder.into()
+}
+
+#[proc_macro]
+pub fn build_to_closure(item: TokenStream) -> TokenStream {
+    let max_count = parse_count(item);
+
+    let mut to_closure = quote! {};
+    for count in 1..=max_count {
+        let (type_name, variable_name) = build_variables(count);
+
+        to_closure = quote! {
+            #to_closure
+
+            impl<#(#type_name: 'static),*, Return: 'static> ToClosure for CallbackServer<(#(#type_name),*,), Return> {
+                type Output = Box<dyn Fn(#(#type_name),*) -> AsyncReturnWithError<Return>>;
+                fn to_closure(self) -> Box<dyn Fn(#(#type_name),*) -> AsyncReturnWithError<Return>> {
+                    Box::new(move |#(#variable_name),*| self.call((#(#variable_name),*,)))
+                }
+            }
+        }
+    }
+
+    to_closure.into()
 }
 
 #[proc_macro_attribute]

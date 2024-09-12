@@ -1,3 +1,4 @@
+use combadge_macros::build_post_tuple;
 use js_sys::Array;
 use wasm_bindgen::prelude::*;
 
@@ -47,17 +48,4 @@ pub(crate) trait PostTuple<T> {
     fn post_tuple(&mut self, tuple: T) -> Result<(), Error>;
 }
 
-impl<A> PostTuple<(A,)> for Message {
-    fn post_tuple(&mut self, tuple: (A,)) -> Result<(), Error> {
-        self.post(tuple.0)?;
-        Ok(())
-    }
-}
-
-impl<A, B> PostTuple<(A, B)> for Message {
-    fn post_tuple(&mut self, tuple: (A, B)) -> Result<(), Error> {
-        self.post(tuple.0)?;
-        self.post(tuple.1)?;
-        Ok(())
-    }
-}
+build_post_tuple!(7);

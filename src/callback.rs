@@ -4,6 +4,10 @@ use std::future::Future;
 use std::marker::PhantomData;
 use std::rc::{Rc, Weak};
 
+use combadge_macros::{
+    build_call_traits, build_callback_from_closure, build_callback_types, build_responder,
+    build_to_closure,
+};
 use futures::{FutureExt, TryFutureExt};
 use js_sys::{Array, Promise};
 use wasm_bindgen::prelude::*;
@@ -11,7 +15,7 @@ use wasm_bindgen_futures::JsFuture;
 use web_sys::{MessageChannel, MessageEvent, MessagePort};
 
 use crate::message::PostTuple;
-use crate::{build_responders, Error, Message, Post, Transfer};
+use crate::{Error, Message, Post, Transfer};
 
 type AsyncReturn<R> = Box<dyn Future<Output = R>>;
 type AsyncReturnWithError<R> = Box<dyn Future<Output = Result<R, Error>>>;
@@ -21,7 +25,7 @@ trait Responder {
     fn respond(&self, arguments: Array, port: MessagePort) -> Result<(), Error>;
 }
 
-build_responders!(7);
+build_responder!(7);
 
 struct CallbackClient {
     /// The client holds a reference to itself so it can keep the Closure alive.
@@ -92,12 +96,12 @@ impl CallbackClient {
     }
 }
 
-struct CallbackServer<A, R> {
-    _phantom: PhantomData<(A, R)>,
+struct CallbackServer<Args, Return> {
+    _phantom: PhantomData<(Args, Return)>,
     port: MessagePort,
 }
 
-impl<Args: 'static, R: 'static> CallbackServer<Args, R>
+impl<Args: 'static, Return: 'static> CallbackServer<Args, Return>
 where
     Message: PostTuple<Args>,
 {
@@ -108,7 +112,7 @@ where
         }
     }
 
-    fn call(&self, args: Args) -> AsyncReturnWithError<R> {
+    fn call(&self, args: Args) -> AsyncReturnWithError<Return> {
         let mut send_result = None;
         let promise = Promise::new(&mut |resolve, _reject| {
             send_result = Some(resolve);
@@ -148,21 +152,9 @@ trait ToClosure {
     fn to_closure(self) -> Self::Output;
 }
 
-impl<A: 'static, R: 'static> ToClosure for CallbackServer<(A,), R> {
-    type Output = Box<dyn Fn(A) -> AsyncReturnWithError<R>>;
-    fn to_closure(self) -> Box<dyn Fn(A) -> AsyncReturnWithError<R>> {
-        Box::new(move |a| self.call((a,)))
-    }
-}
+build_to_closure!(7);
 
-impl<A: 'static, B: 'static, R: 'static> ToClosure for CallbackServer<(A, B), R> {
-    type Output = Box<dyn Fn(A, B) -> AsyncReturnWithError<R>>;
-    fn to_closure(self) -> Box<dyn Fn(A, B) -> AsyncReturnWithError<R>> {
-        Box::new(move |a, b| self.call((a, b)))
-    }
-}
-
-impl<Args, R> Drop for CallbackServer<Args, R> {
+impl<Args, Return> Drop for CallbackServer<Args, Return> {
     fn drop(&mut self) {
         if let Err(error) = self
             .port
@@ -184,72 +176,26 @@ impl<T> CallbackTypes for T {
     default type Remote = ();
 }
 
-impl<A, R> CallbackTypes for ((A,), R) {
-    type Local = Box<dyn Fn(A) -> R>;
-    type Remote = Box<dyn Fn(A) -> AsyncReturnWithError<R>>;
+build_callback_types!(7);
+
+pub struct Callback<Args, Return: 'static> {
+    local: Option<<(Args, Return) as CallbackTypes>::Local>,
+    remote: Option<<(Args, Return) as CallbackTypes>::Remote>,
 }
 
-impl<A, B, R> CallbackTypes for ((A, B), R) {
-    type Local = Box<dyn Fn(A, B) -> R>;
-    type Remote = Box<dyn Fn(A, B) -> AsyncReturnWithError<R>>;
-}
+build_callback_from_closure!(7);
 
-pub struct Callback<A, R: 'static> {
-    local: Option<<(A, R) as CallbackTypes>::Local>,
-    remote: Option<<(A, R) as CallbackTypes>::Remote>,
-}
-
-impl<A, R> Transfer for Callback<A, R> {
-    const NEEDS_TRANSFER: bool = true;
-}
-
-impl<A, R> From<Box<dyn Fn(A) -> R>> for Callback<(A,), R> {
-    fn from(callback: Box<dyn Fn(A) -> R>) -> Self {
-        Self {
-            local: Some(callback),
-            remote: None,
-        }
-    }
-}
-
-impl<A, R> From<Box<dyn Fn(A) -> AsyncReturnWithError<R>>> for Callback<(A,), R> {
-    fn from(callback: Box<dyn Fn(A) -> AsyncReturnWithError<R>>) -> Self {
-        Self {
-            local: None,
-            remote: Some(callback),
-        }
-    }
-}
-
-impl<A, B, R> From<Box<dyn Fn(A, B) -> R>> for Callback<(A, B), R> {
-    fn from(callback: Box<dyn Fn(A, B) -> R>) -> Self {
-        Self {
-            local: Some(callback),
-            remote: None,
-        }
-    }
-}
-
-impl<A, B, R> From<Box<dyn Fn(A, B) -> AsyncReturnWithError<R>>> for Callback<(A, B), R> {
-    fn from(callback: Box<dyn Fn(A, B) -> AsyncReturnWithError<R>>) -> Self {
-        Self {
-            local: None,
-            remote: Some(callback),
-        }
-    }
-}
-
-impl<Args: 'static, R: 'static> Post for Callback<Args, R>
+impl<Args: 'static, Return: 'static> Post for Callback<Args, Return>
 where
     Message: PostTuple<Args>,
-    <(Args, R) as CallbackTypes>::Local: Responder,
-    CallbackServer<Args, R>: ToClosure,
-    <CallbackServer<Args, R> as ToClosure>::Output: Into<Self>,
+    <(Args, Return) as CallbackTypes>::Local: Responder,
+    CallbackServer<Args, Return>: ToClosure,
+    <CallbackServer<Args, Return> as ToClosure>::Output: Into<Self>,
 {
     const POSTABLE: bool = true;
 
     fn from_js_value(value: JsValue) -> Result<Self, Error> {
-        let server = CallbackServer::<Args, R>::new(value.into());
+        let server = CallbackServer::<Args, Return>::new(value.into());
         Ok(server.to_closure().into())
     }
 
@@ -265,52 +211,8 @@ where
     }
 }
 
-pub trait Call1<A, R> {
-    fn call(&self, a: A) -> AsyncReturnWithError<R>;
+impl<Args, Return> Transfer for Callback<Args, Return> {
+    const NEEDS_TRANSFER: bool = true;
 }
 
-impl<A, R: 'static> Call1<A, R> for Callback<(A,), R>
-where
-    <((A,), R) as CallbackTypes>::Local: Fn(A) -> R,
-    <((A,), R) as CallbackTypes>::Remote: Fn(A) -> AsyncReturnWithError<R>,
-{
-    fn call(&self, a: A) -> AsyncReturnWithError<R> {
-        if let Some(remote) = &self.remote {
-            remote(a)
-        } else if let Some(local) = &self.local {
-            let response = local(a);
-            Box::new(async { Ok(response) })
-        } else {
-            Box::new(async {
-                Err(Error::CallbackFailed {
-                    error: String::from("remote callback not found"),
-                })
-            })
-        }
-    }
-}
-
-pub trait Call2<A, B, R> {
-    fn call(&self, a: A, b: B) -> AsyncReturnWithError<R>;
-}
-
-impl<A, B, R: 'static> Call2<A, B, R> for Callback<(A, B), R>
-where
-    <((A, B), R) as CallbackTypes>::Local: Fn(A, B) -> R,
-    <((A, B), R) as CallbackTypes>::Remote: Fn(A, B) -> AsyncReturnWithError<R>,
-{
-    fn call(&self, a: A, b: B) -> AsyncReturnWithError<R> {
-        if let Some(remote) = &self.remote {
-            remote(a, b)
-        } else if let Some(local) = &self.local {
-            let response = local(a, b);
-            Box::new(async { Ok(response) })
-        } else {
-            Box::new(async {
-                Err(Error::CallbackFailed {
-                    error: String::from("remote callback not found"),
-                })
-            })
-        }
-    }
-}
+build_call_traits!(7);
