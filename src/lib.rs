@@ -4,7 +4,7 @@
 
 extern crate combadge_macros;
 pub use combadge_macros::combadge;
-use combadge_macros::build_responder;
+use combadge_macros::build_responders;
 
 mod callback;
 pub use callback::{AsyncClosure, Call1, Callback};

@@ -11,7 +11,7 @@ use wasm_bindgen_futures::JsFuture;
 use web_sys::{MessageChannel, MessageEvent, MessagePort};
 
 use crate::message::PostTuple;
-use crate::{build_responder, Error, Message, Post, Transfer};
+use crate::{build_responders, Error, Message, Post, Transfer};
 
 type AsyncReturn<R> = Box<dyn Future<Output = R>>;
 type AsyncReturnWithError<R> = Box<dyn Future<Output = Result<R, Error>>>;
@@ -21,13 +21,7 @@ trait Responder {
     fn respond(&self, arguments: Array, port: MessagePort) -> Result<(), Error>;
 }
 
-build_responder!(1);
-build_responder!(2);
-build_responder!(3);
-build_responder!(4);
-build_responder!(5);
-build_responder!(6);
-build_responder!(7);
+build_responders!(7);
 
 struct CallbackClient {
     /// The client holds a reference to itself so it can keep the Closure alive.

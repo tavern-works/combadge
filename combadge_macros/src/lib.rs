@@ -2,10 +2,9 @@ extern crate proc_macro;
 
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::{parse, parse_macro_input, FnArg, ItemTrait, LitInt, Pat, ReturnType, TraitItem};
+use syn::{parse, parse_macro_input, FnArg, Ident, ItemTrait, LitInt, Pat, ReturnType, TraitItem};
 
-#[proc_macro]
-pub fn build_responder(item: TokenStream) -> TokenStream {
+fn parse_count(item: TokenStream) -> usize {
     let Ok(count) = parse::<LitInt>(item.clone().into()) else {
         panic!("expected an integer literal");
     };
@@ -22,6 +21,10 @@ pub fn build_responder(item: TokenStream) -> TokenStream {
         panic!("can only generate up to 26 variables without running out of letters");
     }
 
+    count
+}
+
+fn build_variables(count: usize) -> (Vec<Ident>, Vec<Ident>) {
     let type_name = (0..count)
         .map(|i| char::from(b'A' + i as u8))
         .collect::<Vec<_>>();
@@ -36,31 +39,46 @@ pub fn build_responder(item: TokenStream) -> TokenStream {
         .map(|t| format_ident!("{}", t))
         .collect::<Vec<_>>();
 
-    quote! {
-        impl<#(#type_name),*, R> Responder for Box<dyn Fn(#(#type_name),*) -> R> {
-            fn respond(&self, arguments: Array, port: MessagePort) -> Result<(), Error> {
-                #(
-                    let #variable_name: #type_name = Post::from_js_value(arguments.shift())?;
-                )*
-                let result = Post::to_js_value(self(#(#variable_name),*))?;
+    (type_name, variable_name)
+}
 
-                if R::NEEDS_TRANSFER {
-                    port.post_message_with_transferable(&result, &result)
-                        .map_err(|error| Error::PostFailed {
-                            error: format!("failed to respond in Responder: {error:?}"),
-                        })?;
-                } else {
-                    port.post_message(&result)
-                        .map_err(|error| Error::PostFailed {
-                            error: format!("failed to respond in Responder: {error:?}"),
-                        })?;
+#[proc_macro]
+pub fn build_responders(item: TokenStream) -> TokenStream {
+    let max_count = parse_count(item);
+
+    let mut responders = quote! {};
+    for count in 1..=max_count {
+        let (type_name, variable_name) = build_variables(count);
+
+        responders = quote! {
+            #responders
+
+            impl<#(#type_name),*, Return> Responder for Box<dyn Fn(#(#type_name),*) -> Return> {
+                fn respond(&self, arguments: Array, port: MessagePort) -> Result<(), Error> {
+                    #(
+                        let #variable_name: #type_name = Post::from_js_value(arguments.shift())?;
+                    )*
+                    let result = Post::to_js_value(self(#(#variable_name),*))?;
+    
+                    if Return::NEEDS_TRANSFER {
+                        port.post_message_with_transferable(&result, &result)
+                            .map_err(|error| Error::PostFailed {
+                                error: format!("failed to respond in Responder: {error:?}"),
+                            })?;
+                    } else {
+                        port.post_message(&result)
+                            .map_err(|error| Error::PostFailed {
+                                error: format!("failed to respond in Responder: {error:?}"),
+                            })?;
+                    }
+    
+                    Ok(())
                 }
-
-                Ok(())
             }
         }
     }
-    .into()
+
+    responders.into()
 }
 
 #[proc_macro_attribute]
