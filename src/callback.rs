@@ -27,18 +27,18 @@ trait Responder {
 
 build_responder!(7);
 
-struct CallbackClient {
-    /// The client holds a reference to itself so it can keep the Closure alive.
-    /// Once it receives the drop message, it releases this reference so the whole client is dropped.
+struct CallbackServer {
+    /// The server holds a reference to itself so it can keep the Closure alive.
+    /// Once it receives the drop message, it releases this reference so the whole server is dropped.
     phylactery: Option<Rc<RefCell<Self>>>,
     #[expect(
         dead_code,
-        reason = "We hold onto this closure's memory until the client is dropped"
+        reason = "We hold onto this closure's memory until the server is dropped"
     )]
     on_message: Closure<dyn Fn(MessageEvent)>,
 }
 
-impl CallbackClient {
+impl CallbackServer {
     pub fn create<T: Responder + 'static>(callback: T) -> Result<MessagePort, Error> {
         let channel = MessageChannel::new().map_err(|error| Error::CreationFailed {
             type_name: String::from("MessageChannel"),
@@ -47,20 +47,20 @@ impl CallbackClient {
 
         let client = Rc::new_cyclic(|weak_self: &Weak<RefCell<Self>>| {
             let cloned_weak = weak_self.clone();
-            let client_port = channel.port1();
+            let server_port = channel.port1();
             let on_message = Closure::wrap(Box::new(move |message: MessageEvent| {
                 let payload: Array = message.data().into();
                 let Some(operation) = payload.shift().as_string() else {
                     #[cfg(feature = "log")]
-                    log::error!("failed to get operation string in CallbackClient message");
+                    log::error!("failed to get operation string in CallbackServer message");
                     return;
                 };
 
                 match operation.as_str() {
                     "call" => {
-                        if let Err(error) = callback.respond(payload, client_port.clone()) {
+                        if let Err(error) = callback.respond(payload, server_port.clone()) {
                             #[cfg(feature = "log")]
-                            log::error!("failed to respond to CallbackClient call: {error}");
+                            log::error!("failed to respond to CallbackServer call: {error}");
                         }
                     }
                     "drop" => {
@@ -69,13 +69,13 @@ impl CallbackClient {
                                 client.phylactery = None;
                             } else {
                                 #[cfg(feature = "log")]
-                                log::error!("failed to borrow CallbackClient to drop it");
+                                log::error!("failed to borrow CallbackServer to drop it");
                             }
                         }
                     }
                     _ => {
                         #[cfg(feature = "log")]
-                        log::error!("unknown operation {operation} in CallbackClient message");
+                        log::error!("unknown operation {operation} in CallbackServer message");
                     }
                 }
             }) as Box<dyn Fn(MessageEvent)>);
@@ -96,12 +96,12 @@ impl CallbackClient {
     }
 }
 
-struct CallbackServer<Args, Return> {
+struct CallbackClient<Args, Return> {
     _phantom: PhantomData<(Args, Return)>,
     port: MessagePort,
 }
 
-impl<Args: 'static, Return: 'static> CallbackServer<Args, Return>
+impl<Args: 'static, Return: 'static> CallbackClient<Args, Return>
 where
     Message: PostTuple<Args>,
 {
@@ -154,14 +154,14 @@ trait ToClosure {
 
 build_to_closure!(7);
 
-impl<Args, Return> Drop for CallbackServer<Args, Return> {
+impl<Args, Return> Drop for CallbackClient<Args, Return> {
     fn drop(&mut self) {
         if let Err(error) = self
             .port
             .post_message(&Array::of1(&JsValue::from_str("drop")))
         {
             #[cfg(feature = "log")]
-            log::error!("error while posting drop message to client: {error:?}");
+            log::error!("error while posting drop message to server: {error:?}");
         }
     }
 }
@@ -189,13 +189,13 @@ impl<Args: 'static, Return: 'static> Post for Callback<Args, Return>
 where
     Message: PostTuple<Args>,
     <(Args, Return) as CallbackTypes>::Local: Responder,
-    CallbackServer<Args, Return>: ToClosure,
-    <CallbackServer<Args, Return> as ToClosure>::Output: Into<Self>,
+    CallbackClient<Args, Return>: ToClosure,
+    <CallbackClient<Args, Return> as ToClosure>::Output: Into<Self>,
 {
     const POSTABLE: bool = true;
 
     fn from_js_value(value: JsValue) -> Result<Self, Error> {
-        let server = CallbackServer::<Args, Return>::new(value.into());
+        let server = CallbackClient::<Args, Return>::new(value.into());
         Ok(server.to_closure().into())
     }
 
@@ -207,7 +207,7 @@ where
             });
         };
 
-        CallbackClient::create(local).map(JsValue::from)
+        CallbackServer::create(local).map(JsValue::from)
     }
 }
 

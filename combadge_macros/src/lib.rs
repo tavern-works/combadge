@@ -218,7 +218,7 @@ pub fn build_to_closure(item: TokenStream) -> TokenStream {
         to_closure = quote! {
             #to_closure
 
-            impl<#(#type_name: 'static),*, Return: 'static> ToClosure for CallbackServer<(#(#type_name),*,), Return> {
+            impl<#(#type_name: 'static),*, Return: 'static> ToClosure for CallbackClient<(#(#type_name),*,), Return> {
                 type Output = Box<dyn Fn(#(#type_name),*) -> AsyncReturnWithError<Return>>;
                 fn to_closure(self) -> Box<dyn Fn(#(#type_name),*) -> AsyncReturnWithError<Return>> {
                     Box::new(move |#(#variable_name),*| self.call((#(#variable_name),*,)))
@@ -515,16 +515,6 @@ pub fn proxy(_attr: TokenStream, item: TokenStream) -> TokenStream {
         })
         .collect::<Vec<_>>();
 
-    let non_receiver_type = non_receiver
-        .iter()
-        .map(|non_receiver| {
-            non_receiver
-                .iter()
-                .map(|item| item.ty.clone())
-                .collect::<Vec<_>>()
-        })
-        .collect::<Vec<_>>();
-
     let output = functions
         .iter()
         .map(|function| function.sig.output.clone())
@@ -535,14 +525,6 @@ pub fn proxy(_attr: TokenStream, item: TokenStream) -> TokenStream {
         .map(|output| match output {
             ReturnType::Default => quote! { () },
             ReturnType::Type(_, t) => quote! { #t },
-        })
-        .collect::<Vec<_>>();
-
-    let return_with_error = output
-        .iter()
-        .map(|output| match output {
-            ReturnType::Default => quote! { Result<(), ::combadge::Error> },
-            ReturnType::Type(_, t) => quote! { Result<#t, ::combadge::Error> },
         })
         .collect::<Vec<_>>();
 
