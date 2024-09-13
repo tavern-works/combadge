@@ -401,22 +401,21 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
             #(
                 fn #name(local: &mut dyn #trait_name, data: ::combadge::reexports::js_sys::Array) -> Result<(), ::combadge::Error> {
                     use ::combadge::reexports::wasm_bindgen::JsCast;
-                    
+
                     #(
                         const _: () = assert!(<#non_receiver_type as ::combadge::Post>::POSTABLE);
                         let #non_receiver = ::combadge::Post::from_js_value(data.shift())?;
                     )*
                     let result = local.#name(#(#non_receiver_name),*);
                     let port: ::combadge::reexports::web_sys::MessagePort = data.shift().into();
-                    port
-                        .post_message(&::combadge::Post::to_js_value(result)?)
-                        .map_err(|error| {
-                            if let Ok(exception) = error.clone().dyn_into::<::combadge::reexports::web_sys::DomException>() {
-                                log::info!("got exception {} {}", exception.name(), exception.message());
-                            }
-
-                            ::combadge::Error::PostFailed{ error: format!("post failed in {} {error:?}", #name_string)}
-                        })
+                    if <#return_type as ::combadge::Transfer>::NEEDS_TRANSFER {
+                        let value = ::combadge::Post::to_js_value(result)?;
+                        port.post_message_with_transferable(&value, &::combadge::reexports::js_sys::Array::of1(&value))
+                    } else {
+                        port.post_message(&::combadge::Post::to_js_value(result)?)
+                    }.map_err(|error| {
+                        ::combadge::Error::PostFailed{ error: format!("post failed in {} {error:?}", #name_string)}
+                    })
                 }
             )*
         }
