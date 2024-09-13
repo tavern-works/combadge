@@ -20,12 +20,14 @@ mod post;
 pub use post::{Post, Transfer};
 mod server;
 pub use server::Server;
+mod to_async;
+pub use to_async::{MaybeAsync, ToAsync};
 
 pub mod reexports {
     pub use ::futures;
     pub use ::js_sys;
-    pub use ::serde;
     pub use ::wasm_bindgen;
+    pub use ::wasm_bindgen_futures;
     pub use ::web_sys;
 }
 
