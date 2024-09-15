@@ -11,15 +11,14 @@ use combadge_macros::{
 use futures::{FutureExt, TryFutureExt};
 use js_sys::{Array, Promise};
 use wasm_bindgen::prelude::*;
-use wasm_bindgen_futures::JsFuture;
+use wasm_bindgen_futures::{spawn_local, JsFuture};
 use web_sys::{MessageChannel, MessageEvent, MessagePort};
 
 use crate::message::PostTuple;
 use crate::{Error, Message, Post, Transfer};
 
-type AsyncReturn<R> = Box<dyn Future<Output = R>>;
-type AsyncReturnWithError<R> = Box<dyn Future<Output = Result<R, Error>>>;
-pub type AsyncClosure<A, R> = Box<dyn Fn(A) -> AsyncReturn<R>>;
+type AsyncReturn<R> = Box<dyn Future<Output = R> + 'static>;
+type AsyncReturnWithError<R> = Box<dyn Future<Output = Result<R, Error>> + 'static>;
 
 trait Responder {
     fn respond(&self, arguments: Array, port: MessagePort) -> Result<(), Error>;
@@ -168,11 +167,13 @@ impl<Args, Return> Drop for CallbackClient<Args, Return> {
 
 trait CallbackTypes {
     type Local;
+    type AsyncLocal;
     type Remote;
 }
 
 impl<T> CallbackTypes for T {
     default type Local = ();
+    default type AsyncLocal = ();
     default type Remote = ();
 }
 
@@ -180,6 +181,7 @@ build_callback_types!(7);
 
 pub struct Callback<Args, Return: 'static> {
     local: Option<<(Args, Return) as CallbackTypes>::Local>,
+    async_local: Option<<(Args, Return) as CallbackTypes>::AsyncLocal>,
     remote: Option<<(Args, Return) as CallbackTypes>::Remote>,
 }
 
@@ -189,25 +191,28 @@ impl<Args: 'static, Return: 'static> Post for Callback<Args, Return>
 where
     Message: PostTuple<Args>,
     <(Args, Return) as CallbackTypes>::Local: Responder,
+    <(Args, Return) as CallbackTypes>::AsyncLocal: Responder,
     CallbackClient<Args, Return>: ToClosure,
     <CallbackClient<Args, Return> as ToClosure>::Output: Into<Self>,
 {
     const POSTABLE: bool = true;
 
     fn from_js_value(value: JsValue) -> Result<Self, Error> {
-        let server = CallbackClient::<Args, Return>::new(value.into());
-        Ok(server.to_closure().into())
+        let client = CallbackClient::<Args, Return>::new(value.into());
+        Ok(client.to_closure().into())
     }
 
     fn to_js_value(self) -> Result<JsValue, Error> {
-        let Some(local) = self.local else {
+        if let Some(local) = self.local {
+            CallbackServer::create(local).map(JsValue::from)
+        } else if let Some(async_local) = self.async_local {
+            CallbackServer::create(async_local).map(JsValue::from)
+        } else {
             return Err(Error::SerializeFailed {
                 type_name: String::from(type_name::<Self>()),
                 error: String::from("can't serialize callback without a local callback"),
             });
-        };
-
-        CallbackServer::create(local).map(JsValue::from)
+        }
     }
 }
 

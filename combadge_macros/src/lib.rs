@@ -64,6 +64,7 @@ pub fn build_call_traits(item: TokenStream) -> TokenStream {
             impl<#(#type_name),*, Return: 'static> #trait_name<#(#type_name),*, Return> for Callback<(#(#type_name),*,), Return>
             where
                 <((#(#type_name),*,), Return) as CallbackTypes>::Local: Fn(#(#type_name),*) -> Return,
+                <((#(#type_name),*,), Return) as CallbackTypes>::AsyncLocal: Fn(#(#type_name),*) -> AsyncReturn<Return>,
                 <((#(#type_name),*,), Return) as CallbackTypes>::Remote: Fn(#(#type_name),*) -> AsyncReturnWithError<Return>,
             {
                 fn call(&self, #(#variable_name: #type_name),*) -> AsyncReturnWithError<Return> {
@@ -72,6 +73,12 @@ pub fn build_call_traits(item: TokenStream) -> TokenStream {
                     } else if let Some(local) = &self.local {
                         let response = local(#(#variable_name),*);
                         Box::new(async { Ok(response) })
+                    } else if let Some(async_local) = &self.async_local {
+                        let result = async_local(#(#variable_name),*);
+                        Box::new(async move {
+                            let result = Box::into_pin(result).await;
+                            Ok(result)
+                        })
                     } else {
                         Box::new(async {
                             Err(Error::CallbackFailed {
@@ -102,6 +109,17 @@ pub fn build_callback_from_closure(item: TokenStream) -> TokenStream {
                 fn from(callback: Box<dyn Fn(#(#type_name),*) -> Return>) -> Self {
                     Self {
                         local: Some(callback),
+                        async_local: None,
+                        remote: None,
+                    }
+                }
+            }
+
+            impl<#(#type_name),*, Return> From<Box<dyn Fn(#(#type_name),*) -> AsyncReturn<Return>>> for Callback<(#(#type_name),*,), Return> {
+                fn from(callback: Box<dyn Fn(#(#type_name),*) -> AsyncReturn<Return>>) -> Self {
+                    Self {
+                        local: None,
+                        async_local: Some(callback),
                         remote: None,
                     }
                 }
@@ -111,6 +129,7 @@ pub fn build_callback_from_closure(item: TokenStream) -> TokenStream {
                 fn from(callback: Box<dyn Fn(#(#type_name),*) -> AsyncReturnWithError<Return>>) -> Self {
                     Self {
                         local: None,
+                        async_local: None,
                         remote: Some(callback),
                     }
                 }
@@ -134,6 +153,7 @@ pub fn build_callback_types(item: TokenStream) -> TokenStream {
 
             impl<#(#type_name),*, Return> CallbackTypes for ((#(#type_name),*,), Return) {
                 type Local = Box<dyn Fn(#(#type_name),*) -> Return>;
+                type AsyncLocal = Box<dyn Fn(#(#type_name),*) -> AsyncReturn<Return>>;
                 type Remote = Box<dyn Fn(#(#type_name),*) -> AsyncReturnWithError<Return>>;
             }
         }
@@ -180,7 +200,7 @@ pub fn build_responder(item: TokenStream) -> TokenStream {
             #responder
 
             impl<#(#type_name),*, Return> Responder for Box<dyn Fn(#(#type_name),*) -> Return> {
-                fn respond(&self, arguments: Array, port: MessagePort) -> Result<(), Error> {
+                default fn respond(&self, arguments: Array, port: MessagePort) -> Result<(), Error> {
                     #(
                         let #variable_name: #type_name = Post::from_js_value(arguments.shift())?;
                     )*
@@ -198,6 +218,35 @@ pub fn build_responder(item: TokenStream) -> TokenStream {
                             })?;
                     }
 
+                    Ok(())
+                }
+            }
+
+            impl<#(#type_name),*, Return: 'static> Responder for Box<dyn Fn(#(#type_name),*) -> Box<dyn Future<Output = Return>>> {
+                fn respond(&self, arguments: Array, port: MessagePort) -> Result<(), Error> {
+                    #(
+                        let #variable_name: #type_name = Post::from_js_value(arguments.shift())?;
+                    )*
+                    let result = self(#(#variable_name),*);
+                    let future_result = async move {
+                        let result = Box::into_pin(result).await;
+                        let value = match Post::to_js_value(result) {
+                            Ok(value) => value,
+                            Err(error) => {
+                                ::log::error!("error while converting to JsValue in future: {error:?}");
+                                return;
+                            }
+                        };
+
+                        let _ = if Return::NEEDS_TRANSFER {
+                            port.post_message_with_transferable(&value, &Array::of1(&value))
+                        } else {
+                            port.post_message(&value)
+                        }.map_err(|error| {
+                            ::log::error!("error while posting async: {error:?}");
+                        });
+                    };
+                    spawn_local(future_result);
                     Ok(())
                 }
             }
@@ -361,7 +410,7 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
                                                     match arguments.args.get(0).unwrap() {
                                                         GenericArgument::AssocType(assoc) => {
                                                             if assoc.ident != "Output" {
-                                                                return quote! { #t }
+                                                                return quote! { #t };
                                                             }
 
                                                             let generic_type = &assoc.ty;

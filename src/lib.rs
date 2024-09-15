@@ -5,7 +5,7 @@
 extern crate combadge_macros;
 
 mod callback;
-pub use callback::{AsyncClosure, Callback};
+pub use callback::Callback;
 mod client;
 pub use client::Client;
 mod error;
