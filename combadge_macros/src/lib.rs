@@ -347,7 +347,7 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
                                                 }
 
                                                 let segment = bound.path.segments.get(0).unwrap();
-                                                if segment.ident != "ToAsync" {
+                                                if segment.ident != "Future" {
                                                     return quote! { #t };
                                                 }
 
@@ -359,7 +359,12 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
                                                     }
 
                                                     match arguments.args.get(0).unwrap() {
-                                                        GenericArgument::Type(generic_type) => {
+                                                        GenericArgument::AssocType(assoc) => {
+                                                            if assoc.ident != "Output" {
+                                                                return quote! { #t }
+                                                            }
+
+                                                            let generic_type = &assoc.ty;
                                                             quote! { #generic_type }
                                                         }
                                                         _ => quote! { #t },
@@ -482,7 +487,6 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     let async_result = ::combadge::MaybeAsync::to_maybe_async(result);
                     let future_result = async move {
                         let result: #internal_type = Box::into_pin(async_result).await;
-                        log::info!("trying to convert to js");
                         let value = match ::combadge::Post::to_js_value(result) {
                             Ok(value) => value,
                             Err(error) => {
@@ -490,7 +494,6 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
                                 return;
                             }
                         };
-                        log::info!("converted to js");
 
                         let _ = if <#internal_type as ::combadge::Transfer>::NEEDS_TRANSFER {
                             port.post_message_with_transferable(&value, &::combadge::reexports::js_sys::Array::of1(&value))
@@ -500,17 +503,6 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
                             ::log::error!("error while posting async: {error:?}");
                         });
                     };
-                    // let future_result = async_result.then(|result| {
-                    //     let _ = if <#return_type as ::combadge::Transfer>::NEEDS_TRANSFER {
-                    //         let value = ::combadge::Post::to_js_value(result).unwrap();
-                    //         port.post_message_with_transferable(&value, &::combadge::reexports::js_sys::Array::of1(&value))
-                    //     } else {
-                    //         port.post_message(&::combadge::Post::to_js_value(result).unwrap())
-                    //     }.map_err(|error| {
-                    //         ::log::error!("error while posting async: {error:?}");
-                    //     });
-                    //     async { () }
-                    // });
                     spawn_local(future_result);
                     Ok(())
                 }

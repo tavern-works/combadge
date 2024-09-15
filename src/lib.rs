@@ -20,8 +20,8 @@ mod post;
 pub use post::{Post, Transfer};
 mod server;
 pub use server::Server;
-mod to_async;
-pub use to_async::{MaybeAsync, ToAsync};
+mod maybe_async;
+pub use maybe_async::MaybeAsync;
 
 pub mod reexports {
     pub use ::futures;
