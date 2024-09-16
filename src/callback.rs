@@ -2,6 +2,7 @@ use std::any::type_name;
 use std::cell::RefCell;
 use std::future::Future;
 use std::marker::PhantomData;
+use std::pin::Pin;
 use std::rc::{Rc, Weak};
 
 use combadge_macros::{
@@ -17,8 +18,8 @@ use web_sys::{MessageChannel, MessageEvent, MessagePort};
 use crate::message::PostTuple;
 use crate::{Error, Message, Post, Transfer};
 
-type AsyncReturn<R> = Box<dyn Future<Output = R> + 'static>;
-type AsyncReturnWithError<R> = Box<dyn Future<Output = Result<R, Error>> + 'static>;
+type AsyncReturn<R> = Pin<Box<dyn Future<Output = R> + 'static>>;
+type AsyncReturnWithError<R> = Pin<Box<dyn Future<Output = Result<R, Error>> + 'static>>;
 
 trait Responder {
     fn respond(&self, arguments: Array, port: MessagePort) -> Result<(), Error>;
@@ -133,7 +134,7 @@ where
             })
         });
 
-        Box::new(async { post }.and_then(|()| {
+        Box::pin(async { post }.and_then(|()| {
             JsFuture::from(promise).map(|result| {
                 result
                     .map(|result| Post::from_js_value(result))

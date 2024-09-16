@@ -72,15 +72,15 @@ pub fn build_call_traits(item: TokenStream) -> TokenStream {
                         remote(#(#variable_name),*)
                     } else if let Some(local) = &self.local {
                         let response = local(#(#variable_name),*);
-                        Box::new(async { Ok(response) })
+                        Box::pin(async { Ok(response) })
                     } else if let Some(async_local) = &self.async_local {
                         let result = async_local(#(#variable_name),*);
-                        Box::new(async move {
-                            let result = Box::into_pin(result).await;
+                        Box::pin(async move {
+                            let result = result.await;
                             Ok(result)
                         })
                     } else {
-                        Box::new(async {
+                        Box::pin(async {
                             Err(Error::CallbackFailed {
                                 error: String::from("callbacks (both remote and local) not found"),
                             })
