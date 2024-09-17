@@ -522,17 +522,17 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
             }
 
             #(
-                fn #name(local: &mut dyn #trait_name, data: ::combadge::reexports::js_sys::Array) -> Result<(), ::combadge::Error> {
+                fn #name(local_: &mut dyn #trait_name, data_: ::combadge::reexports::js_sys::Array) -> Result<(), ::combadge::Error> {
                     use ::combadge::reexports::wasm_bindgen::JsCast;
                     use ::combadge::reexports::wasm_bindgen_futures::spawn_local;
                     use ::combadge::reexports::futures::FutureExt;
 
                     #(
                         const _: () = assert!(<#non_receiver_type as ::combadge::Post>::POSTABLE);
-                        let #non_receiver = ::combadge::Post::from_js_value(data.shift())?;
+                        let #non_receiver = ::combadge::Post::from_js_value(data_.shift())?;
                     )*
-                    let result = local.#name(#(#non_receiver_name),*);
-                    let port: ::combadge::reexports::web_sys::MessagePort = data.shift().into();
+                    let result = local_.#name(#(#non_receiver_name),*);
+                    let port: ::combadge::reexports::web_sys::MessagePort = data_.shift().into();
                     let async_result = ::combadge::MaybeAsync::to_maybe_async(result);
                     let future_result = async move {
                         let result: #internal_type = Box::into_pin(async_result).await;
