@@ -356,14 +356,6 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
         .map(|function| function.sig.output.clone())
         .collect::<Vec<_>>();
 
-    let return_type = output
-        .iter()
-        .map(|output| match output {
-            ReturnType::Default => quote! { () },
-            ReturnType::Type(_, t) => quote! { #t },
-        })
-        .collect::<Vec<_>>();
-
     let internal_type = output
         .iter()
         .map(|output| match output {
@@ -435,14 +427,6 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 }
                 _ => quote! { #t },
             },
-        })
-        .collect::<Vec<_>>();
-
-    let return_with_error = output
-        .iter()
-        .map(|output| match output {
-            ReturnType::Default => quote! { Result<(), ::combadge::Error> },
-            ReturnType::Type(_, t) => quote! { Result<#t, ::combadge::Error> },
         })
         .collect::<Vec<_>>();
 
