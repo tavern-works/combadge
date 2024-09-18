@@ -448,7 +448,7 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let client_name = format_ident!("{}Client", item.ident);
     let client = quote! {
-        #[derive(Debug)]
+        #[derive(Clone, Debug)]
         pub struct #client_name<P: ::combadge::Port + 'static> {
             client: std::rc::Rc<std::cell::RefCell<::combadge::Client::<P>>>,
         }
