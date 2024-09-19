@@ -238,13 +238,12 @@ pub fn build_responder(item: TokenStream) -> TokenStream {
                             }
                         };
 
-                        if let Some(transferable) = Return::get_transferable(&value) {
-                            port.post_message_with_transferable(&value, &Array::of1(&value))
-                        } else {
-                            port.post_message(&value)
-                        }.map_err(|error| {
+                        if let Err(error) = Return::get_transferable(&value).map_or_else(
+                            || port.post_message(&value),
+                            |transferable| port.post_message_with_transferable(&value, &Array::of1(&value))
+                        ) {
                             ::log::error!("error while posting async: {error:?}");
-                        });
+                        }
                     };
                     spawn_local(future_result);
                     Ok(())
