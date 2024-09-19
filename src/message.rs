@@ -28,8 +28,10 @@ impl Message {
     {
         let post = message.to_js_value()?;
         self.message.push(post.clone());
-        if T::NEEDS_TRANSFER {
-            self.transfer.push(post)
+        if let Some(transferable) = T::get_transferable(&post) {
+            for element in transferable {
+                self.transfer.push(element)
+            }
         }
         Ok(())
     }

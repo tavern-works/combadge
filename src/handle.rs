@@ -1,5 +1,6 @@
 use std::any::type_name;
 
+use js_sys::Array;
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{MessageChannel, MessagePort};
 
@@ -45,7 +46,7 @@ impl<T: AsHandle<T>> Handle<T> {
 }
 
 impl<T: AsHandle<T>> Post for Handle<T> {
-    const POSTABLE: bool = false;
+    const POSTABLE: bool = true;
 
     fn from_js_value(value: JsValue) -> Result<Self, Error> {
         let port: MessagePort = value.dyn_into().map_err(|error| Error::DeserializeFailed {
@@ -74,5 +75,7 @@ impl<T: AsHandle<T>> Post for Handle<T> {
 }
 
 impl<T: AsHandle<T>> Transfer for Handle<T> {
-    const NEEDS_TRANSFER: bool = true;
+    fn get_transferable(js_value: &JsValue) -> Option<Array> {
+        Some(Array::of1(js_value))
+    }
 }

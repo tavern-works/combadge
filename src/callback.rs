@@ -218,7 +218,9 @@ where
 }
 
 impl<Args, Return> Transfer for Callback<Args, Return> {
-    const NEEDS_TRANSFER: bool = true;
+    fn get_transferable(js_value: &JsValue) -> Option<Array> {
+        Some(Array::of1(js_value))
+    }
 }
 
 pub mod call_traits {

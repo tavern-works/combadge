@@ -206,8 +206,8 @@ pub fn build_responder(item: TokenStream) -> TokenStream {
                     )*
                     let result = Post::to_js_value(self(#(#variable_name),*))?;
 
-                    if Return::NEEDS_TRANSFER {
-                        port.post_message_with_transferable(&result, &result)
+                    if let Some(transferable) = <Return as Transfer>::get_transferable(&result) {
+                        port.post_message_with_transferable(&result, &transferable)
                             .map_err(|error| Error::PostFailed {
                                 error: format!("failed to respond in Responder: {error:?}"),
                             })?;
@@ -238,7 +238,7 @@ pub fn build_responder(item: TokenStream) -> TokenStream {
                             }
                         };
 
-                        let _ = if Return::NEEDS_TRANSFER {
+                        if let Some(transferable) = Return::get_transferable(&value) {
                             port.post_message_with_transferable(&value, &Array::of1(&value))
                         } else {
                             port.post_message(&value)
@@ -447,6 +447,7 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 pub fn #name(#(#argument),*) -> impl std::future::Future<Output = Result<#internal_type, ::combadge::Error>> {
                     use ::combadge::reexports::futures::future::FutureExt;
                     use ::combadge::reexports::futures::future::TryFutureExt;
+                    const _: () = assert!(<#internal_type as ::combadge::Post>::POSTABLE);
 
                     let message = Ok(::combadge::Message::new(#name_string));
                     #(
@@ -528,12 +529,12 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
                             }
                         };
 
-                        let _ = if <#internal_type as ::combadge::Transfer>::NEEDS_TRANSFER {
-                            port.post_message_with_transferable(&value, &::combadge::reexports::js_sys::Array::of1(&value))
+                        if let Some(transferable) = <#internal_type as ::combadge::Transfer>::get_transferable(&value) {
+                            port.post_message_with_transferable(&value, &transferable)
                         } else {
                             port.post_message(&value)
                         }.map_err(|error| {
-                            ::log::error!("error while posting async: {error:?}");
+                            ::log::error!("error while posting {value:?} {} in {} async: {error:?}", std::any::type_name::<#internal_type>(), #name_string);
                         });
                     };
                     spawn_local(future_result);

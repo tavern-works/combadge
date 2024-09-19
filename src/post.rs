@@ -220,13 +220,29 @@ impl<T, E> Post for Result<T, E> {
 }
 
 pub trait Transfer {
-    const NEEDS_TRANSFER: bool;
+    fn get_transferable(js_value: &JsValue) -> Option<Array>;
 }
 
 impl<T> Transfer for T {
-    default const NEEDS_TRANSFER: bool = false;
+    default fn get_transferable(_js_value: &JsValue) -> Option<Array> {
+        None
+    }
+}
+
+impl<T, E> Transfer for Result<T, E> {
+    fn get_transferable(js_value: &JsValue) -> Option<Array> {
+        let array: &Array = js_value.unchecked_ref();
+        let tag = array.get(0).as_string().unwrap();
+        match tag.as_str() {
+            "Ok" => T::get_transferable(&array.get(1)),
+            "Err" => E::get_transferable(&array.get(1)),
+            _ => None,
+        }
+    }
 }
 
 impl Transfer for MessagePort {
-    const NEEDS_TRANSFER: bool = true;
+    fn get_transferable(js_value: &JsValue) -> Option<Array> {
+        Some(Array::of1(js_value))
+    }
 }
