@@ -508,9 +508,7 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
             #(
                 fn #name(local_: &mut dyn #trait_name, data_: ::combadge::reexports::js_sys::Array) -> Result<(), ::combadge::Error> {
-                    use ::combadge::reexports::wasm_bindgen::JsCast;
                     use ::combadge::reexports::wasm_bindgen_futures::spawn_local;
-                    use ::combadge::reexports::futures::FutureExt;
 
                     #(
                         const _: () = assert!(<#non_receiver_type as ::combadge::Post>::POSTABLE);
@@ -529,13 +527,12 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
                             }
                         };
 
-                        if let Some(transferable) = <#internal_type as ::combadge::Transfer>::get_transferable(&value) {
-                            port.post_message_with_transferable(&value, &transferable)
-                        } else {
-                            port.post_message(&value)
-                        }.map_err(|error| {
+                        if let Err(error) = <#internal_type as ::combadge::Transfer>::get_transferable(&value).map_or_else(
+                            || port.post_message(&value),
+                            |transferable| port.post_message_with_transferable(&value, &transferable))
+                        {
                             ::log::error!("error while posting {value:?} {} in {} async: {error:?}", std::any::type_name::<#internal_type>(), #name_string);
-                        });
+                        }
                     };
                     spawn_local(future_result);
                     Ok(())
