@@ -45,7 +45,7 @@ impl CallbackServer {
             error: format!("{error:?}"),
         })?;
 
-        let client = Rc::new_cyclic(|weak_self: &Weak<RefCell<Self>>| {
+        let server = Rc::new_cyclic(|weak_self: &Weak<RefCell<Self>>| {
             let cloned_weak = weak_self.clone();
             let server_port = channel.port1();
             let on_message = Closure::wrap(Box::new(move |message: MessageEvent| {
@@ -86,7 +86,7 @@ impl CallbackServer {
             })
         });
 
-        client.borrow_mut().phylactery = Some(client.clone());
+        server.borrow_mut().phylactery = Some(server.clone());
 
         Ok(channel.port2())
     }
