@@ -1,6 +1,6 @@
 [package]
 name = "combadge"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Dan Stoza <stoza@periapt.media>"]
 edition = "2021"
 description = "Combadge makes Rust Web Workers easy"
@@ -26,7 +26,6 @@ wasm-bindgen-futures = "0.4"
 version = "0.3"
 features = [
     "DedicatedWorkerGlobalScope",
-    "DomException",
     "MessageChannel",
     "MessageEvent",
     "MessagePort",
