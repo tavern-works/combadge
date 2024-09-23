@@ -1,6 +1,6 @@
 [package]
 name = "combadge"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Dan Stoza <stoza@periapt.media>"]
 edition = "2021"
 description = "Combadge makes Rust Web Workers easy"
