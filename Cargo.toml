@@ -8,7 +8,7 @@ repository = "https://github.com/tavern-works/combadge"
 license = "MIT"
 
 [features]
-default = ["log"]
+log = ["dep:log"]
 experimental_shared_memory = []
 
 [dependencies]

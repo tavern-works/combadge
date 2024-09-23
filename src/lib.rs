@@ -12,6 +12,7 @@ mod error;
 pub use error::Error;
 mod handle;
 pub use handle::{AsHandle, Handle};
+mod log;
 mod message;
 pub use message::Message;
 mod port;

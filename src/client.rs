@@ -8,7 +8,7 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{MessageChannel, MessageEvent};
 
-use crate::{Error, Message, Port, Post};
+use crate::{log_error, Error, Message, Port, Post};
 
 #[derive(Debug)]
 pub struct Client<P: Port> {
@@ -30,8 +30,7 @@ impl<P: Port + 'static> Client<P> {
                 if let Some(message) = event.data().as_string() {
                     if message == "*handshake" {
                         let Some(client) = Weak::upgrade(&cloned_weak_self) else {
-                            #[cfg(feature = "log")]
-                            log::error!("failed to upgrade weak client in message callback");
+                            log_error!("failed to upgrade weak client in message callback");
                             return;
                         };
 
@@ -39,8 +38,7 @@ impl<P: Port + 'static> Client<P> {
                         // after we drop it
                         let on_ready = {
                             let Ok(mut client) = client.try_borrow_mut() else {
-                                #[cfg(feature = "log")]
-                                log::error!("failed to borrow client in message callback");
+                                log_error!("failed to borrow client in message callback");
                                 return;
                             };
 
@@ -50,8 +48,7 @@ impl<P: Port + 'static> Client<P> {
 
                         for on_ready in on_ready {
                             if let Err(error) = on_ready.call0(&JsValue::NULL) {
-                                #[cfg(feature = "log")]
-                                log::error!("failed to call on_ready callback in message callback: {error:?}");
+                                log_error!("failed to call on_ready callback in message callback: {error:?}");
                             }
                         }
                     }
@@ -61,8 +58,7 @@ impl<P: Port + 'static> Client<P> {
             port.set_onmessage(Some(on_message.as_ref().unchecked_ref()));
 
             if let Err(error) = port.post_message(&Array::of1(&JsValue::from_str("*handshake"))) {
-                #[cfg(feature = "log")]
-                log::error!("error sending handshake: {error:?}");
+                log_error!("error sending handshake: {error:?}");
             }
 
             RefCell::new(Self {
@@ -91,8 +87,7 @@ impl<P: Port + 'static> Client<P> {
         let future = JsFuture::from(promise).map(|result| {
             result.map_or_else(
                 |error| {
-                    #[cfg(feature = "log")]
-                    log::error!("error in wait_for_server future: {error:?}");
+                    log_error!("error in wait_for_server future: {error:?}");
                 },
                 |_| (),
             )

@@ -5,7 +5,7 @@ use js_sys::Array;
 use wasm_bindgen::prelude::*;
 use web_sys::MessageEvent;
 
-use crate::{Error, Port};
+use crate::{log_error, Error, Port};
 
 type Dispatcher = Box<dyn FnMut(&str, Array) -> Result<(), Error>>;
 
@@ -26,14 +26,12 @@ impl<P: Port + 'static> Server<P> {
             let cloned_weak_self = weak_self.clone();
             let on_message = Closure::new(move |event: MessageEvent| {
                 let Some(server) = Weak::upgrade(&cloned_weak_self) else {
-                    #[cfg(feature = "log")]
-                    log::error!("failed to upgrade weak server in message callback");
+                    log_error!("failed to upgrade weak server in message callback");
                     return;
                 };
 
                 let Ok(mut server) = server.try_borrow_mut() else {
-                    #[cfg(feature = "log")]
-                    log::error!("failed to borrow server in message callback");
+                    log_error!("failed to borrow server in message callback");
                     return;
                 };
 
@@ -42,13 +40,11 @@ impl<P: Port + 'static> Server<P> {
 
                 if procedure == "*handshake" {
                     if let Err(error) = server.port.post_message(&JsValue::from_str("*handshake")) {
-                        #[cfg(feature = "log")]
-                        log::error!("error sending handshake: {error:?}");
+                        log_error!("error sending handshake: {error:?}");
                     }
                 } else {
                     if let Err(error) = (server.dispatcher)(&procedure, data) {
-                        #[cfg(feature = "log")]
-                        log::error!("error dispatching {procedure}: {error}");
+                        log_error!("error dispatching {procedure}: {error}");
                     }
                 }
             });
@@ -56,8 +52,7 @@ impl<P: Port + 'static> Server<P> {
             port.set_onmessage(Some(on_message.as_ref().unchecked_ref()));
 
             if let Err(error) = port.post_message(&JsValue::from_str("*handshake")) {
-                #[cfg(feature = "log")]
-                log::error!("error sending handshake: {error:?}");
+                log_error!("error sending handshake: {error:?}");
             }
 
             RefCell::new(Self {

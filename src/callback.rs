@@ -16,7 +16,7 @@ use wasm_bindgen_futures::{spawn_local, JsFuture};
 use web_sys::{MessageChannel, MessageEvent, MessagePort};
 
 use crate::message::PostTuple;
-use crate::{Error, Message, Post, Transfer};
+use crate::{log_error, Error, Message, Post, Transfer};
 
 type AsyncReturn<R> = Pin<Box<dyn Future<Output = R> + 'static>>;
 type AsyncReturnWithError<R> = Pin<Box<dyn Future<Output = Result<R, Error>> + 'static>>;
@@ -51,16 +51,14 @@ impl CallbackServer {
             let on_message = Closure::wrap(Box::new(move |message: MessageEvent| {
                 let payload: Array = message.data().into();
                 let Some(operation) = payload.shift().as_string() else {
-                    #[cfg(feature = "log")]
-                    log::error!("failed to get operation string in CallbackServer message");
+                    log_error!("failed to get operation string in CallbackServer message");
                     return;
                 };
 
                 match operation.as_str() {
                     "call" => {
                         if let Err(error) = callback.respond(payload, server_port.clone()) {
-                            #[cfg(feature = "log")]
-                            log::error!("failed to respond to CallbackServer call: {error}");
+                            log_error!("failed to respond to CallbackServer call: {error}");
                         }
                     }
                     "drop" => {
@@ -68,14 +66,12 @@ impl CallbackServer {
                             if let Ok(mut client) = client.try_borrow_mut() {
                                 client.phylactery = None;
                             } else {
-                                #[cfg(feature = "log")]
-                                log::error!("failed to borrow CallbackServer to drop it");
+                                log_error!("failed to borrow CallbackServer to drop it");
                             }
                         }
                     }
                     _ => {
-                        #[cfg(feature = "log")]
-                        log::error!("unknown operation {operation} in CallbackServer message");
+                        log_error!("unknown operation {operation} in CallbackServer message");
                     }
                 }
             }) as Box<dyn Fn(MessageEvent)>);
@@ -120,7 +116,13 @@ where
         let send_result = send_result.unwrap();
 
         let on_message = Closure::once_into_js(move |message: MessageEvent| {
-            send_result.call1(&JsValue::NULL, &message.data())
+            let _ = send_result
+                .call1(&JsValue::NULL, &message.data())
+                .map_err(|error| {
+                    log_error!(
+                        "error while calling send_result in CallbackClient::call: {error:?}"
+                    );
+                });
         });
         self.port.set_onmessage(Some(&on_message.unchecked_ref()));
         let mut message = Message::new("call");
@@ -160,8 +162,7 @@ impl<Args, Return> Drop for CallbackClient<Args, Return> {
             .port
             .post_message(&Array::of1(&JsValue::from_str("drop")))
         {
-            #[cfg(feature = "log")]
-            log::error!("error while posting drop message to server: {error:?}");
+            log_error!("error while posting drop message to server: {error:?}");
         }
     }
 }

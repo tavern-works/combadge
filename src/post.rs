@@ -41,13 +41,9 @@ where
     const POSTABLE: bool = true;
 
     fn from_js_value(value: JsValue) -> Result<Self, Error> {
-        serde_wasm_bindgen::from_value(value).map_err(|error| {
-            #[cfg(feature = "log")]
-            log::error!("error after trying to deserialize {error:?}");
-            Error::DeserializeFailed {
-                type_name: String::from(type_name::<T>()),
-                error: format!("{error:?}"),
-            }
+        serde_wasm_bindgen::from_value(value).map_err(|error| Error::DeserializeFailed {
+            type_name: String::from(type_name::<T>()),
+            error: format!("{error:?}"),
         })
     }
 
@@ -103,9 +99,6 @@ where
         let instance_ref = unsafe { T::ref_from_abi(ptr) };
         let cloned = instance_ref.clone();
 
-        #[cfg(feature = "log")]
-        log::info!("got {cloned:?}");
-
         Ok(instance_ref.clone())
     }
 
@@ -122,9 +115,6 @@ where
                 type_name: String::from(type_name::<T>()),
                 error: String::from("failed to convert __wbg_ptr to f64"),
             })? as u32;
-
-        #[cfg(feature = "log")]
-        log::info!("serializing {ptr}");
 
         Ok(value)
     }

@@ -200,19 +200,19 @@ pub fn build_responder(item: TokenStream) -> TokenStream {
             #responder
 
             impl<#(#type_name),*, Return> Responder for Box<dyn Fn(#(#type_name),*) -> Return> {
-                default fn respond(&self, arguments: Array, port: MessagePort) -> Result<(), Error> {
+                default fn respond(&self, arguments_: Array, port_: MessagePort) -> Result<(), Error> {
                     #(
-                        let #variable_name: #type_name = Post::from_js_value(arguments.shift())?;
+                        let #variable_name: #type_name = Post::from_js_value(arguments_.shift())?;
                     )*
                     let result = Post::to_js_value(self(#(#variable_name),*))?;
 
                     if let Some(transferable) = <Return as Transfer>::get_transferable(&result) {
-                        port.post_message_with_transferable(&result, &transferable)
+                        port_.post_message_with_transferable(&result, &transferable)
                             .map_err(|error| Error::PostFailed {
                                 error: format!("failed to respond in Responder: {error:?}"),
                             })?;
                     } else {
-                        port.post_message(&result)
+                        port_.post_message(&result)
                             .map_err(|error| Error::PostFailed {
                                 error: format!("failed to respond in Responder: {error:?}"),
                             })?;
@@ -223,9 +223,9 @@ pub fn build_responder(item: TokenStream) -> TokenStream {
             }
 
             impl<#(#type_name),*, Return: 'static> Responder for Box<dyn Fn(#(#type_name),*) -> Box<dyn Future<Output = Return>>> {
-                fn respond(&self, arguments: Array, port: MessagePort) -> Result<(), Error> {
+                fn respond(&self, arguments_: Array, port_: MessagePort) -> Result<(), Error> {
                     #(
-                        let #variable_name: #type_name = Post::from_js_value(arguments.shift())?;
+                        let #variable_name: #type_name = Post::from_js_value(arguments_.shift())?;
                     )*
                     let result = self(#(#variable_name),*);
                     let future_result = async move {
@@ -233,16 +233,16 @@ pub fn build_responder(item: TokenStream) -> TokenStream {
                         let value = match Post::to_js_value(result) {
                             Ok(value) => value,
                             Err(error) => {
-                                ::log::error!("error while converting to JsValue in future: {error:?}");
+                                crate::log_error!("error while converting to JsValue in future: {error:?}");
                                 return;
                             }
                         };
 
                         if let Err(error) = Return::get_transferable(&value).map_or_else(
-                            || port.post_message(&value),
-                            |transferable| port.post_message_with_transferable(&value, &Array::of1(&value))
+                            || port_.post_message(&value),
+                            |transferable| port_.post_message_with_transferable(&value, &Array::of1(&value))
                         ) {
-                            ::log::error!("error while posting async: {error:?}");
+                            crate::log_error!("error while posting async: {error:?}");
                         }
                     };
                     spawn_local(future_result);
@@ -521,7 +521,7 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
                         let value = match ::combadge::Post::to_js_value(result) {
                             Ok(value) => value,
                             Err(error) => {
-                                ::log::error!("error while converting to JsValue in future: {error:?}");
+                                ::combadge::log_error!("error while converting to JsValue in future: {error:?}");
                                 return;
                             }
                         };
@@ -530,7 +530,7 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
                             || port.post_message(&value),
                             |transferable| port.post_message_with_transferable(&value, &transferable))
                         {
-                            ::log::error!("error while posting {value:?} {} in {} async: {error:?}", std::any::type_name::<#internal_type>(), #name_string);
+                            ::combadge::log_error!("error while posting {value:?} {} in {} async: {error:?}", std::any::type_name::<#internal_type>(), #name_string);
                         }
                     };
                     spawn_local(future_result);
