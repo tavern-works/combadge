@@ -122,7 +122,7 @@ impl<P: Port + 'static> Client<P> {
                         self.port
                             .post_message_with_transfer(message, transfer)
                             .map_err(|error| Error::PostFailed {
-                                error: format!("pmwt {error:?}"),
+                                error: format!("error posting message in Client send_message: {error:?}"),
                             })
                     })
                     .and_then(|()| Ok(promise))

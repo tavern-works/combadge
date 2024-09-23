@@ -1,6 +1,7 @@
 use std::any::type_name;
 use std::cell::RefCell;
-use std::future::Future;
+use std::collections::VecDeque;
+use std::future::{ready, Future};
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::rc::{Rc, Weak};
@@ -10,7 +11,7 @@ use combadge_macros::{
     build_to_closure,
 };
 use futures::{FutureExt, TryFutureExt};
-use js_sys::{Array, Promise};
+use js_sys::{Array, Function, Promise};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::{spawn_local, JsFuture};
 use web_sys::{MessageChannel, MessageEvent, MessagePort};
@@ -95,6 +96,12 @@ impl CallbackServer {
 struct CallbackClient<Args, Return> {
     _phantom: PhantomData<(Args, Return)>,
     port: MessagePort,
+    #[expect(
+        dead_code,
+        reason = "We hold onto this closure's memory until the server is dropped"
+    )]
+    on_message: Closure<dyn Fn(MessageEvent)>,
+    results: Rc<RefCell<VecDeque<Function>>>,
 }
 
 impl<Args: 'static, Return: 'static> CallbackClient<Args, Return>
@@ -102,9 +109,32 @@ where
     Message: PostTuple<Args>,
 {
     fn new(port: MessagePort) -> Self {
+        let results: Rc<RefCell<VecDeque<Function>>> = Rc::default();
+        let cloned_results = results.clone();
+
+        let on_message = Closure::wrap(Box::new(move |message: MessageEvent| {
+            let Ok(mut results) = cloned_results.try_borrow_mut() else {
+                log_error!("failed to borrow results queue in CallbackClient on_message");
+                return;
+            };
+
+            let Some(send_result) = results.pop_front() else {
+                log_error!("no result function found in CallbackClient");
+                return;
+            };
+
+            if let Err(error) = send_result.call1(&JsValue::NULL, &message.data()) {
+                log_error!("error while calling send_result in CallbackClient::call: {error:?}");
+            }
+        }) as Box<dyn Fn(MessageEvent)>);
+
+        port.set_onmessage(Some(&on_message.as_ref().unchecked_ref()));
+
         Self {
             _phantom: PhantomData,
             port,
+            on_message,
+            results,
         }
     }
 
@@ -115,16 +145,14 @@ where
         });
         let send_result = send_result.unwrap();
 
-        let on_message = Closure::once_into_js(move |message: MessageEvent| {
-            let _ = send_result
-                .call1(&JsValue::NULL, &message.data())
-                .map_err(|error| {
-                    log_error!(
-                        "error while calling send_result in CallbackClient::call: {error:?}"
-                    );
-                });
-        });
-        self.port.set_onmessage(Some(&on_message.unchecked_ref()));
+        let Ok(mut results) = self.results.try_borrow_mut() else {
+            return Box::pin(ready(Err(Error::CallbackFailed {
+                error: String::from("failed to borrow results queue"),
+            })));
+        };
+
+        results.push_back(send_result);
+
         let mut message = Message::new("call");
         let post = message.post_tuple(args).and_then(|()| {
             message.send(|message, transfer| {
