@@ -1,7 +1,7 @@
 use std::any::type_name;
 
 use combadge_macros::{build_post_for_tuple, build_transfer_for_tuple};
-use js_sys::Array;
+use js_sys::{Array, Uint32Array};
 use serde::{de::DeserializeOwned, Serialize};
 use wasm_bindgen::prelude::*;
 use web_sys::MessagePort;
@@ -307,5 +307,12 @@ build_transfer_for_tuple!(7);
 impl Transfer for MessagePort {
     fn get_transferable(js_value: &JsValue) -> Option<Array> {
         Some(Array::of1(js_value))
+    }
+}
+
+impl Transfer for Uint32Array {
+    fn get_transferable(js_value: &JsValue) -> Option<Array> {
+        let as_self: &Self = js_value.dyn_ref().unwrap();
+        Some(Array::of1(&as_self.buffer()))
     }
 }

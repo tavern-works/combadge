@@ -420,7 +420,8 @@ pub fn derive_post(item: TokenStream) -> TokenStream {
             #from_js_value
             #to_js_value
         }
-    }.into()
+    }
+    .into()
 }
 
 #[proc_macro_derive(Transfer)]
@@ -456,7 +457,8 @@ pub fn derive_transfer(item: TokenStream) -> TokenStream {
         impl Transfer for #struct_name {
             #get_transferable
         }
-    }.into()
+    }
+    .into()
 }
 
 #[proc_macro_attribute]
