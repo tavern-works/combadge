@@ -1,5 +1,6 @@
 use std::any::type_name;
 
+use combadge_macros::{build_post_for_tuple, build_transfer_for_tuple};
 use js_sys::Array;
 use serde::{de::DeserializeOwned, Serialize};
 use wasm_bindgen::prelude::*;
@@ -209,6 +210,51 @@ impl<T, E> Post for Result<T, E> {
     }
 }
 
+impl<T> Post for Box<T>
+where
+    T: Post,
+{
+    const POSTABLE: bool = <T as Post>::POSTABLE;
+
+    fn from_js_value(value: JsValue) -> Result<Self, Error> {
+        let value = <T as Post>::from_js_value(value)?;
+        Ok(Box::new(value))
+    }
+
+    fn to_js_value(self) -> Result<JsValue, Error> {
+        (*self).to_js_value()
+    }
+}
+
+impl<T> Post for Vec<T>
+where
+    T: Post,
+{
+    const POSTABLE: bool = <T as Post>::POSTABLE;
+
+    fn from_js_value(value: JsValue) -> Result<Self, Error> {
+        let array: Array = value.dyn_into().map_err(|error| Error::DeserializeFailed {
+            type_name: String::from(type_name::<T>()),
+            error: format!("{error:?}"),
+        })?;
+        let vec = array
+            .into_iter()
+            .map(|value| <T as Post>::from_js_value(value))
+            .collect::<Result<_, _>>()?;
+        Ok(vec)
+    }
+
+    fn to_js_value(self) -> Result<JsValue, Error> {
+        let array: Array = self
+            .into_iter()
+            .map(|value| value.to_js_value())
+            .collect::<Result<_, _>>()?;
+        Ok(array.into())
+    }
+}
+
+build_post_for_tuple!(7);
+
 pub trait Transfer {
     fn get_transferable(js_value: &JsValue) -> Option<Array>;
 }
@@ -230,6 +276,33 @@ impl<T, E> Transfer for Result<T, E> {
         }
     }
 }
+
+impl<T> Transfer for Box<T>
+where
+    T: Transfer,
+{
+    fn get_transferable(js_value: &JsValue) -> Option<Array> {
+        T::get_transferable(js_value)
+    }
+}
+
+impl<T> Transfer for Vec<T>
+where
+    T: Transfer,
+{
+    fn get_transferable(js_value: &JsValue) -> Option<Array> {
+        let as_array: &Array = js_value.dyn_ref()?;
+        as_array
+            .iter()
+            .filter_map(|value| T::get_transferable(&value))
+            .reduce(|mut acc, e| {
+                acc.extend(e.into_iter());
+                acc
+            })
+    }
+}
+
+build_transfer_for_tuple!(7);
 
 impl Transfer for MessagePort {
     fn get_transferable(js_value: &JsValue) -> Option<Array> {

@@ -36,5 +36,7 @@ pub mod prelude {
     pub use crate::callback::call_traits::*;
     pub use crate::callback::Callback;
     pub use crate::handle::Handle;
-    pub use combadge_macros::{combadge, proxy};
+    pub use crate::post::{Post, Transfer};
+    pub use ::wasm_bindgen::JsCast as _;
+    pub use combadge_macros::{combadge, proxy, Post, Transfer};
 }

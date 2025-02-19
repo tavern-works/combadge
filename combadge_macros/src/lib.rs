@@ -3,8 +3,9 @@ extern crate proc_macro;
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use syn::{
-    parse, parse_macro_input, FnArg, GenericArgument, Ident, ImplItem, Index, ItemImpl, ItemTrait,
-    LitInt, Pat, PathArguments, ReturnType, TraitItem, Type, TypeParamBound, Visibility,
+    parse, parse_macro_input, Field, Fields, FnArg, GenericArgument, Ident, ImplItem, Index,
+    ItemImpl, ItemStruct, ItemTrait, LitInt, Pat, PathArguments, ReturnType, TraitItem, Type,
+    TypeParamBound, Visibility,
 };
 
 fn parse_count(item: TokenStream) -> usize {
@@ -189,6 +190,85 @@ pub fn build_post_tuple(item: TokenStream) -> TokenStream {
 }
 
 #[proc_macro]
+pub fn build_post_for_tuple(item: TokenStream) -> TokenStream {
+    let max_count = parse_count(item);
+
+    let mut post = quote! {};
+    for count in 1..=max_count {
+        let (type_name, _) = build_variables(count);
+        let index = (0..count).map(Index::from).collect::<Vec<_>>();
+
+        post = quote! {
+            #post
+
+            impl<#(#type_name),*> Post for (#(#type_name),*,)
+            where
+                #(#type_name: Post),*
+            {
+                const POSTABLE: bool = true #(&& <#type_name as Post>::POSTABLE)*;
+
+                fn from_js_value(value: JsValue) -> Result<Self, Error> {
+                    let array: Array = value.dyn_into().map_err(|error| Error::DeserializeFailed {
+                        type_name: String::from(type_name::<(#(#type_name),*,)>()),
+                        error: format!("{error:?}"),
+                    })?;
+                    Ok((#(
+                        #type_name::from_js_value(array.get(#index))?
+                    ),*,))
+                }
+
+                fn to_js_value(self) -> Result<JsValue, Error> {
+                    let array = Array::from_iter([
+                        #(#type_name::to_js_value(self.#index)?),*
+                    ].into_iter());
+                    Ok(array.into())
+                }
+            }
+        }
+    }
+
+    post.into()
+}
+
+#[proc_macro]
+pub fn build_transfer_for_tuple(item: TokenStream) -> TokenStream {
+    let max_count = parse_count(item);
+
+    let mut transfer = quote! {};
+    for count in 1..=max_count {
+        let (type_name, _) = build_variables(count);
+        let index = (0..count).map(Index::from).collect::<Vec<_>>();
+
+        transfer = quote! {
+            #transfer
+
+            impl<#(#type_name),*> Transfer for (#(#type_name),*,)
+            where
+                #(#type_name: Transfer),*
+            {
+                fn get_transferable(js_value: &JsValue) -> Option<Array> {
+                    let as_array: &Array = js_value.dyn_ref()?;
+                    let mut transferable = Array::new();
+                    #(
+                        if let Some(array) = #type_name::get_transferable(&as_array.get(#index)) {
+                            transferable.extend(array.into_iter());
+                        }
+                    )*
+
+                    if transferable.length() == 0 {
+                        None
+                    } else {
+                        Some(transferable)
+                    }
+                }
+            }
+        }
+    }
+
+    transfer.into()
+}
+
+#[proc_macro]
 pub fn build_responder(item: TokenStream) -> TokenStream {
     let max_count = parse_count(item);
 
@@ -276,6 +356,107 @@ pub fn build_to_closure(item: TokenStream) -> TokenStream {
     }
 
     to_closure.into()
+}
+
+fn parse_named_fields<'a>(fields: impl Iterator<Item = &'a Field>) -> (Vec<Ident>, Vec<Type>) {
+    fields
+        .map(|field| (field.ident.clone().unwrap(), field.ty.clone()))
+        .unzip()
+}
+
+#[proc_macro_derive(Post)]
+pub fn derive_post(item: TokenStream) -> TokenStream {
+    let item_struct: ItemStruct = parse_macro_input!(item);
+
+    let postable = match &item_struct.fields {
+        Fields::Named(fields) => {
+            let (_, field_type) = parse_named_fields(fields.named.iter());
+            quote! {
+                const POSTABLE: bool = true #(&& <#field_type as Post>::POSTABLE)*;
+            }
+        }
+        _ => unimplemented!(),
+    };
+
+    let from_js_value = match &item_struct.fields {
+        Fields::Named(fields) => {
+            let (field_name, field_type) = parse_named_fields(fields.named.iter());
+            let index = (0..field_name.len()).map(Index::from).collect::<Vec<_>>();
+            quote! {
+                fn from_js_value(value: combadge::reexports::wasm_bindgen::JsValue) -> std::result::Result<Self, combadge::Error> {
+                    let array: combadge::reexports::js_sys::Array = value.dyn_into().map_err(|error| combadge::Error::DeserializeFailed {
+                        type_name: String::from(std::any::type_name::<Self>()),
+                        error: format!("{error:?}"),
+                    })?;
+                    Ok(Self {
+                        #(
+                            #field_name: <#field_type as Post>::from_js_value(array.get(#index))?
+                        ),*
+                    })
+                }
+            }
+        }
+        _ => unimplemented!(),
+    };
+
+    let to_js_value = match item_struct.fields {
+        Fields::Named(fields) => {
+            let (field_name, field_type) = parse_named_fields(fields.named.iter());
+            quote! {
+                fn to_js_value(self) -> std::result::Result<combadge::reexports::wasm_bindgen::JsValue, combadge::Error> {
+                    Ok(combadge::reexports::js_sys::Array::from_iter([
+                        #(<#field_type as Post>::to_js_value(self.#field_name)?),*
+                    ].into_iter()).into())
+                }
+            }
+        }
+        _ => unimplemented!(),
+    };
+
+    let struct_name = item_struct.ident;
+    quote! {
+        impl Post for #struct_name {
+            #postable
+            #from_js_value
+            #to_js_value
+        }
+    }.into()
+}
+
+#[proc_macro_derive(Transfer)]
+pub fn derive_transfer(item: TokenStream) -> TokenStream {
+    let item_struct: ItemStruct = parse_macro_input!(item);
+
+    let get_transferable = match item_struct.fields {
+        Fields::Named(fields) => {
+            let (field_name, field_type) = parse_named_fields(fields.named.iter());
+            let index = (0..field_name.len()).map(Index::from).collect::<Vec<_>>();
+            quote! {
+                fn get_transferable(value: &combadge::reexports::wasm_bindgen::JsValue) -> Option<combadge::reexports::js_sys::Array> {
+                    let as_array: &combadge::reexports::js_sys::Array = value.dyn_ref()?;
+                    let mut transferable = combadge::reexports::js_sys::Array::new();
+                    #(
+                        if let Some(array) = #field_type::get_transferable(&as_array.get(#index)) {
+                            transferable.extend(array)
+                        }
+                    )*
+                    if transferable.length() == 0 {
+                        None
+                    } else {
+                        Some(transferable)
+                    }
+                }
+            }
+        }
+        _ => unimplemented!(),
+    };
+
+    let struct_name = item_struct.ident;
+    quote! {
+        impl Transfer for #struct_name {
+            #get_transferable
+        }
+    }.into()
 }
 
 #[proc_macro_attribute]
