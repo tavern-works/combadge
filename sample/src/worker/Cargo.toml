@@ -1,0 +1,18 @@
+[package]
+name = "worker"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+anyhow = { workspace = true }
+combadge = { workspace = true }
+console_log = { workspace = true }
+log = { workspace = true }
+interface = { path = "../interface" }
+js-sys = { workspace = true }
+wasm-bindgen = { workspace = true }
+wasm-bindgen-futures = { workspace = true }
+web-sys = { workspace = true, features = ["DedicatedWorkerGlobalScope"] }

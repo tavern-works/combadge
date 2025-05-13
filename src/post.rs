@@ -296,7 +296,7 @@ where
             .iter()
             .filter_map(|value| T::get_transferable(&value))
             .reduce(|mut acc, e| {
-                acc.extend(e.into_iter());
+                acc.extend(e);
                 acc
             })
     }

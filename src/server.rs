@@ -39,20 +39,19 @@ impl<P: Port + 'static> Server<P> {
                 let procedure = data.shift().as_string().unwrap();
 
                 if procedure == "*handshake" {
-                    if let Err(error) = server.port.post_message(&JsValue::from_str("*handshake")) {
-                        log_error!("error sending handshake: {error:?}");
+                    if let Err(_error) = server.port.post_message(&JsValue::from_str("*handshake"))
+                    {
+                        log_error!("error sending handshake: {_error:?}");
                     }
-                } else {
-                    if let Err(error) = (server.dispatcher)(&procedure, data) {
-                        log_error!("error dispatching {procedure}: {error}");
-                    }
+                } else if let Err(_error) = (server.dispatcher)(&procedure, data) {
+                    log_error!("error dispatching {procedure}: {_error}");
                 }
             });
 
             port.set_onmessage(Some(on_message.as_ref().unchecked_ref()));
 
-            if let Err(error) = port.post_message(&JsValue::from_str("*handshake")) {
-                log_error!("error sending handshake: {error:?}");
+            if let Err(_error) = port.post_message(&JsValue::from_str("*handshake")) {
+                log_error!("error sending handshake: {_error:?}");
             }
 
             RefCell::new(Self {

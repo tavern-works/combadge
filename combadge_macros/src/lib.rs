@@ -631,16 +631,16 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     use ::combadge::reexports::futures::future::TryFutureExt;
                     const _: () = assert!(<#internal_type as ::combadge::Post>::POSTABLE);
 
-                    let message = Ok(::combadge::Message::new(#name_string));
+                    let message_ = Ok(::combadge::Message::new(#name_string));
                     #(
                         const _: () = assert!(<#non_receiver_type as ::combadge::Post>::POSTABLE);
-                        let message = message.and_then(|mut message| {
-                            message.post(#non_receiver_name)?;
-                            Ok(message)
+                        let message_ = message_.and_then(|mut message_| {
+                            message_.post(#non_receiver_name)?;
+                            Ok(message_)
                         });
                     )*
 
-                    let server_ready = match self
+                    let server_ready_ = match self
                         .client
                         .try_borrow_mut()
                         .map_err(|_| ::combadge::Error::ClientUnavailable)
@@ -650,16 +650,16 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     };
 
                     let client_clone = self.client.clone();
-                    server_ready.then(move |result| {
-                        let message = result.and(message);
-                        async { message }.and_then(move |message| {
+                    server_ready_.then(move |result_| {
+                        let message_ = result_.and(message_);
+                        async { message_ }.and_then(move |message_| {
                             let client = client_clone
                                 .try_borrow_mut()
                                 .map_err(|_| ::combadge::Error::ClientUnavailable);
-                            let message = client.map(|mut client| client.send_message::<#internal_type>(message));
-                            async { message }.try_flatten().map(|result| {
-                                let result: Result<#internal_type, ::combadge::Error> = result.map(std::convert::Into::into);
-                                result
+                            let message_ = client.map(|mut client| client.send_message::<#internal_type>(message_));
+                            async { message_ }.try_flatten().map(|result_| {
+                                let result_: Result<#internal_type, ::combadge::Error> = result_.map(std::convert::Into::into);
+                                result_
                             })
                         })
                     })
@@ -696,27 +696,27 @@ pub fn combadge(_attr: TokenStream, item: TokenStream) -> TokenStream {
                         const _: () = assert!(<#non_receiver_type as ::combadge::Post>::POSTABLE);
                         let #non_receiver = ::combadge::Post::from_js_value(data_.shift())?;
                     )*
-                    let result = local_.#name(#(#non_receiver_name),*);
-                    let port: ::combadge::reexports::web_sys::MessagePort = data_.shift().into();
-                    let async_result = ::combadge::MaybeAsync::to_maybe_async(result);
-                    let future_result = async move {
-                        let result: #internal_type = Box::into_pin(async_result).await;
-                        let value = match ::combadge::Post::to_js_value(result) {
-                            Ok(value) => value,
-                            Err(error) => {
-                                ::combadge::log_error!("error while converting to JsValue in future: {error:?}");
+                    let result_ = local_.#name(#(#non_receiver_name),*);
+                    let port_: ::combadge::reexports::web_sys::MessagePort = data_.shift().into();
+                    let async_result_ = ::combadge::MaybeAsync::to_maybe_async(result_);
+                    let future_result_ = async move {
+                        let result_: #internal_type = Box::into_pin(async_result_).await;
+                        let value_ = match ::combadge::Post::to_js_value(result_) {
+                            Ok(value_) => value_,
+                            Err(error_) => {
+                                ::combadge::log_error!("error while converting to JsValue in future: {error_:?}");
                                 return;
                             }
                         };
 
-                        if let Err(error) = <#internal_type as ::combadge::Transfer>::get_transferable(&value).map_or_else(
-                            || port.post_message(&value),
-                            |transferable| port.post_message_with_transferable(&value, &transferable))
+                        if let Err(error_) = <#internal_type as ::combadge::Transfer>::get_transferable(&value_).map_or_else(
+                            || port_.post_message(&value_),
+                            |transferable| port_.post_message_with_transferable(&value_, &transferable))
                         {
-                            ::combadge::log_error!("error while posting {value:?} {} in {} async: {error:?}", std::any::type_name::<#internal_type>(), #name_string);
+                            ::combadge::log_error!("error while posting {value_:?} {} in {} async: {error_:?}", std::any::type_name::<#internal_type>(), #name_string);
                         }
                     };
-                    spawn_local(future_result);
+                    spawn_local(future_result_);
                     Ok(())
                 }
             )*

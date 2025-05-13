@@ -17,15 +17,11 @@ macro_rules! log_error {
 #[cfg(not(feature = "log"))]
 #[macro_export]
 macro_rules! log_info {
-    ($($arg:expr),*) => {
-        {}
-    }
+    ($($arg:expr),*) => {{}};
 }
 
 #[cfg(not(feature = "log"))]
 #[macro_export]
 macro_rules! log_error {
-    ($($arg:expr),*) => {
-        {}
-    }
+    ($($arg:expr),*) => {{}};
 }

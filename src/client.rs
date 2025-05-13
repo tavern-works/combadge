@@ -47,8 +47,8 @@ impl<P: Port + 'static> Client<P> {
                         };
 
                         for on_ready in on_ready {
-                            if let Err(error) = on_ready.call0(&JsValue::NULL) {
-                                log_error!("failed to call on_ready callback in message callback: {error:?}");
+                            if let Err(_error) = on_ready.call0(&JsValue::NULL) {
+                                log_error!("failed to call on_ready callback in message callback: {_error:?}");
                             }
                         }
                     }
@@ -57,8 +57,8 @@ impl<P: Port + 'static> Client<P> {
 
             port.set_onmessage(Some(on_message.as_ref().unchecked_ref()));
 
-            if let Err(error) = port.post_message(&Array::of1(&JsValue::from_str("*handshake"))) {
-                log_error!("error sending handshake: {error:?}");
+            if let Err(_error) = port.post_message(&Array::of1(&JsValue::from_str("*handshake"))) {
+                log_error!("error sending handshake: {_error:?}");
             }
 
             RefCell::new(Self {
@@ -86,8 +86,8 @@ impl<P: Port + 'static> Client<P> {
 
         let future = JsFuture::from(promise).map(|result| {
             result.map_or_else(
-                |error| {
-                    log_error!("error in wait_for_server future: {error:?}");
+                |_error| {
+                    log_error!("error in wait_for_server future: {_error:?}");
                 },
                 |_| (),
             )
@@ -122,10 +122,12 @@ impl<P: Port + 'static> Client<P> {
                         self.port
                             .post_message_with_transfer(message, transfer)
                             .map_err(|error| Error::PostFailed {
-                                error: format!("error posting message in Client send_message: {error:?}"),
+                                error: format!(
+                                    "error posting message in Client send_message: {error:?}"
+                                ),
                             })
                     })
-                    .and_then(|()| Ok(promise))
+                    .map(|()| promise)
             })
         });
 

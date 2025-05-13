@@ -1,0 +1,13 @@
+[workspace]
+resolver = "2"
+members = ["interface", "main", "worker"]
+
+[workspace.dependencies]
+anyhow = "1.0"
+combadge = { path = "../.." }
+console_log = "1.0"
+js-sys = "0.3"
+log = "0.4"
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+web-sys = "0.3"

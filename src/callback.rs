@@ -58,8 +58,8 @@ impl CallbackServer {
 
                 match operation.as_str() {
                     "call" => {
-                        if let Err(error) = callback.respond(payload, server_port.clone()) {
-                            log_error!("failed to respond to CallbackServer call: {error}");
+                        if let Err(_error) = callback.respond(payload, server_port.clone()) {
+                            log_error!("failed to respond to CallbackServer call: {_error}");
                         }
                     }
                     "drop" => {
@@ -123,12 +123,12 @@ where
                 return;
             };
 
-            if let Err(error) = send_result.call1(&JsValue::NULL, &message.data()) {
-                log_error!("error while calling send_result in CallbackClient::call: {error:?}");
+            if let Err(_error) = send_result.call1(&JsValue::NULL, &message.data()) {
+                log_error!("error while calling send_result in CallbackClient::call: {_error:?}");
             }
         }) as Box<dyn Fn(MessageEvent)>);
 
-        port.set_onmessage(Some(&on_message.as_ref().unchecked_ref()));
+        port.set_onmessage(Some(on_message.as_ref().unchecked_ref()));
 
         Self {
             _phantom: PhantomData,
@@ -186,11 +186,11 @@ build_to_closure!(7);
 
 impl<Args, Return> Drop for CallbackClient<Args, Return> {
     fn drop(&mut self) {
-        if let Err(error) = self
+        if let Err(_error) = self
             .port
             .post_message(&Array::of1(&JsValue::from_str("drop")))
         {
-            log_error!("error while posting drop message to server: {error:?}");
+            log_error!("error while posting drop message to server: {_error:?}");
         }
     }
 }
@@ -252,6 +252,7 @@ impl<Args, Return> Transfer for Callback<Args, Return> {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub mod call_traits {
     use super::*;
     build_call_traits!(7);
