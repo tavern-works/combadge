@@ -9,6 +9,11 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
 jobs:
   format:
     runs-on: ubuntu-latest
@@ -57,3 +62,11 @@ jobs:
     - name: Build site
       run: npm run build
       working-directory: ./sample
+    - uses: actions/configure-pages@v5
+    - name: Upload artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: './sample/dist/'
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4
