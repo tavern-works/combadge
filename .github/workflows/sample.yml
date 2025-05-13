@@ -48,3 +48,12 @@ jobs:
     - name: Build worker
       run: wasm-pack build --target web
       working-directory: ./sample/src/worker
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 20
+    - name: Install Node packages
+      run: npm i
+      working-directory: ./sample
+    - name: Build site
+      run: npm run build
+      working-directory: ./sample
