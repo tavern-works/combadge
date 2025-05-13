@@ -1,0 +1,48 @@
+name: Rust
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Switch to Nightly
+      run: rustup default nightly
+    - name: Format
+      run: cargo fmt --check
+      working-directory: ./sample
+
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Switch to Nightly
+      run: rustup default nightly
+    - name: Install clippy
+      run: rustup component add clippy
+    - name: Clippy
+      run: cargo clippy
+      working-directory: ./sample
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Switch to Nightly
+      run: rustup default nightly
+    - name: Install wasm-pack
+      run: cargo install wasm-pack
+    - name: Build main
+      run: wasm-pack build --target web
+      working-directory: ./sample/src/main
+    - name: Build worker
+      run: wasm-pack build --target web
+      working-directory: ./sample/src/worker
