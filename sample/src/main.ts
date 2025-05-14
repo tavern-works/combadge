@@ -6,8 +6,8 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
 <div>
     <h1>Combadge Sample App</h1>
 
-    <p class="read-the-docs" style="margin-bottom:1em;">
-        View the source <a href="">here</a>
+    <p class="read-the-docs" style="margin-bottom:2em;">
+        View the source <a href="https://github.com/tavern-works/combadge/tree/main/sample">here</a>
     </p>
 
     <div class="line">
