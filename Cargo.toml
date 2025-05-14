@@ -4,6 +4,8 @@ version = "0.4.0"
 authors = ["Dan Stoza <stoza@periapt.media>"]
 edition = "2021"
 description = "Combadge makes Rust Web Workers easy"
+categories = ["asynchronous", "concurrency", "wasm", "web-programming"]
+keywords = ["wasm", "webworkers"]
 repository = "https://github.com/tavern-works/combadge"
 license = "MIT"
 
