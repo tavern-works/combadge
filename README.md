@@ -86,7 +86,7 @@ impl Client {
 }
 ```
 
-> You might have noticed that `InterfaceClient` is parameterized over `Worker`. This is because under the covers, there's a `combadge::Client` struct that is also used for callbacks, in which case it receives a `MessagePort` instead of a `Worker` instance.
+> You might have noticed that `InterfaceClient` is parameterized over `Worker`. This is because under the covers, there's a `combadge::Client` struct that is also used for [callbacks](#callbacks), in which case it receives a `MessagePort` instead of a `Worker` instance.
 
 On the TypeScript side, we can create this client like this:
 
@@ -132,3 +132,43 @@ client.add(3, 5).then((sum) => console.log(`3 + 5 = ${sum}`));
 ```
 
 If you want to see this all together, along with a few more example methods, check out the [source](https://github.com/tavern-works/combadge/tree/main/sample) of the [sample app](https://how.tavern.works/combadge/).
+
+# Types
+
+While most basic types should work as parameters and return values, you may also need types that require a bit of special handling. Combadge provides two traits for types to be sent across threads: `Post` and `Transfer`.
+
+`Post` looks like this:
+
+```rust
+pub trait Post: Sized {
+    const POSTABLE: bool; // If you override this, this should be true
+    fn from_js_value(value: JsValue) -> Result<Self, Error>;
+    fn to_js_value(self) -> Result<JsValue, Error>;
+}
+```
+
+The idea is that anything that implements Post can be converted to/from a `JsValue`. There are some built-in implementations for things that do this inherently (such as `f32`) as well as common wrappers like `Box` or `Vec`, and objects that are serializable with `serde` can be passed as well. 
+
+> Note that values are expected to be passed by value in all interface methods (except for `&self`) since they can't be shared directly with workers anyway.
+
+If you have a struct composed of `Post` members, you can `#[derive(Post)]` on it, but note that either deriving `Post` or providing a manual implementation of it will require the `min_specialization` [experimental feature](https://github.com/rust-lang/rust/issues/31844).
+
+Combadge also exposes a `Transfer` trait:
+
+```rust
+pub trait Transfer {
+    fn get_transferable(js_value: &JsValue) -> Option<Array>;
+}
+```
+
+This trait tells Combadge to add one or more objects to the [transferable object](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Transferable_objects) list of the `postMessage` call. This can save data copies and may be required for some types which aren't cloneable. Similarly to `Post`, `Transfer` can be derived on structs if all members are `Transfer`, but the same requirement of `min_specialization` applies.
+
+# Callbacks
+
+Combadge also provides a `Callback` struct that allows callback handlers to be passed between threads. `Callback` is parameterized by both parameter and return types, with the parameters being represented as a tuple, so something similar our `add` function from above could be defined as a `Callback<(f32, f32), f32>`. It also has a `From` implementation from compatible `Box`ed functions (for example, `Box<dyn Fn(f32, f32) -> f32>` for our `add` callback) to make it easy to pass them into client calls.
+
+When calling a callback, you'll need to use its `call` method (since it's not possible to directly overload the function call operator), so our example callback would be `add.call(3, 5)` rather than `add(3, 5)`.
+
+> Make sure you `use combadge::prelude::*;` in locations where you want to call the `call` method, because there are a number of generic traits to facilitate this that won't be in scope if you only `use combadge::Callback;`.
+
+Finally, just like interface methods, callback calls turn into asynchronous calls that return a `Future`.
