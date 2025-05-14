@@ -28,7 +28,8 @@ impl<T: AsHandle<T>> From<T> for Handle<T> {
 }
 
 impl<T: AsHandle<T>> Handle<T> {
-    pub fn new_remote(port: MessagePort) -> Self {
+    #[must_use]
+    pub const fn new_remote(port: MessagePort) -> Self {
         Self {
             local: None,
             remote: Some(port),
@@ -53,7 +54,7 @@ impl<T: AsHandle<T>> Post for Handle<T> {
             type_name: String::from(type_name::<T>()),
             error: format!("failed to convert JsValue to MessagePort for Handle: {error:?}"),
         })?;
-        Ok(Handle::new_remote(port))
+        Ok(Self::new_remote(port))
     }
 
     fn to_js_value(self) -> Result<JsValue, Error> {

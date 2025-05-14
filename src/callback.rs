@@ -254,6 +254,7 @@ impl<Args, Return> Transfer for Callback<Args, Return> {
 
 #[allow(clippy::too_many_arguments)]
 pub mod call_traits {
+    #[allow(clippy::wildcard_imports)]
     use super::*;
     build_call_traits!(7);
 }

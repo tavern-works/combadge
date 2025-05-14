@@ -13,7 +13,7 @@ impl<T: Sized + 'static> MaybeAsync<T> for T {
 }
 
 impl<T: Sized + 'static> MaybeAsync<T> for Box<dyn Future<Output = T>> {
-    fn to_maybe_async(self) -> Box<dyn Future<Output = T>> {
+    fn to_maybe_async(self) -> Self {
         self
     }
 }

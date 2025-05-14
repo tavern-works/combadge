@@ -1,3 +1,8 @@
+#![allow(
+    clippy::future_not_send,
+    clippy::missing_errors_doc,
+    clippy::missing_panics_doc
+)]
 #![allow(incomplete_features)]
 #![feature(result_flattening)]
 #![feature(specialization)]

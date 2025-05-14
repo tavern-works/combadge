@@ -218,7 +218,7 @@ where
 
     fn from_js_value(value: JsValue) -> Result<Self, Error> {
         let value = <T as Post>::from_js_value(value)?;
-        Ok(Box::new(value))
+        Ok(Self::new(value))
     }
 
     fn to_js_value(self) -> Result<JsValue, Error> {
@@ -247,7 +247,7 @@ where
     fn to_js_value(self) -> Result<JsValue, Error> {
         let array: Array = self
             .into_iter()
-            .map(|value| value.to_js_value())
+            .map(T::to_js_value)
             .collect::<Result<_, _>>()?;
         Ok(array.into())
     }

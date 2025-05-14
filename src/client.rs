@@ -81,7 +81,7 @@ impl<P: Port + 'static> Client<P> {
         });
 
         if let Some(on_ready) = on_ready {
-            self.on_ready.push(on_ready)
+            self.on_ready.push(on_ready);
         }
 
         let future = JsFuture::from(promise).map(|result| {
@@ -90,7 +90,7 @@ impl<P: Port + 'static> Client<P> {
                     log_error!("error in wait_for_server future: {_error:?}");
                 },
                 |_| (),
-            )
+            );
         });
 
         future.right_future()

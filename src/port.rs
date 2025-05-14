@@ -14,7 +14,7 @@ pub trait Port {
 
 impl Port for DedicatedWorkerGlobalScope {
     fn set_onmessage(&self, value: Option<&Function>) {
-        self.set_onmessage(value)
+        self.set_onmessage(value);
     }
 
     fn post_message(&self, message: &JsValue) -> Result<(), JsValue> {
@@ -32,7 +32,7 @@ impl Port for DedicatedWorkerGlobalScope {
 
 impl Port for MessagePort {
     fn set_onmessage(&self, value: Option<&Function>) {
-        self.set_onmessage(value)
+        self.set_onmessage(value);
     }
 
     fn post_message(&self, message: &JsValue) -> Result<(), JsValue> {
@@ -50,7 +50,7 @@ impl Port for MessagePort {
 
 impl Port for Worker {
     fn set_onmessage(&self, value: Option<&Function>) {
-        self.set_onmessage(value)
+        self.set_onmessage(value);
     }
 
     fn post_message(&self, message: &JsValue) -> Result<(), JsValue> {

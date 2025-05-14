@@ -15,6 +15,7 @@ pub struct Message {
 }
 
 impl Message {
+    #[must_use]
     pub fn new(name: &str) -> Self {
         Self {
             message: vec![JsValue::from_str(name)],
@@ -30,7 +31,7 @@ impl Message {
         self.message.push(post.clone());
         if let Some(transferable) = T::get_transferable(&post) {
             for element in transferable {
-                self.transfer.push(element)
+                self.transfer.push(element);
             }
         }
         Ok(())
@@ -46,7 +47,7 @@ impl Message {
     }
 }
 
-pub(crate) trait PostTuple<T> {
+pub trait PostTuple<T> {
     fn post_tuple(&mut self, tuple: T) -> Result<(), Error>;
 }
 
