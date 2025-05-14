@@ -50,14 +50,14 @@ impl Sample for Local {
         Ok(())
     }
 
-    fn double_postable(&self, data: Uint32Array) -> Result<Postable, Error> {
+    fn double_postable(&self, data: Uint32Array) -> Postable {
         data.set_index(100, 200);
-        Ok(data.into())
+        data.into()
     }
 
-    fn double_transferable(&self, data: Uint32Array) -> Result<Transferable, Error> {
+    fn double_transferable(&self, data: Uint32Array) -> Transferable {
         data.set_index(100, 200);
-        Ok(data.into())
+        data.into()
     }
 
     fn get_future(&self) -> Box<dyn Future<Output = String>> {

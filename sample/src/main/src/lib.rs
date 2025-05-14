@@ -70,8 +70,8 @@ impl Client {
         self.client
             .double_postable(data)
             .await
+            .map(|postable| postable.data)
             .map_err(Error::from)
-            .and_then(|result| result.map(|postable| postable.data))
     }
 
     #[wasm_bindgen(js_name = doubleTransferable)]
@@ -79,8 +79,8 @@ impl Client {
         self.client
             .double_transferable(data)
             .await
+            .map(|transferable| transferable.data)
             .map_err(Error::from)
-            .and_then(|result| result.map(|transferable| transferable.data))
     }
 
     #[wasm_bindgen(js_name = getFuture)]
