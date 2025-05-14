@@ -1,3 +1,5 @@
+[![Sample Build](https://github.com/tavern-works/combadge/actions/workflows/sample.yml/badge.svg)](https://github.com/tavern-works/combadge/actions/workflows/sample.yml) [![Combadge on crates.io](https://img.shields.io/crates/v/combadge)](https://crates.io/crates/combadge)
+
 # Introduction
 
 Combadge is a Rust library inspired by [Comlink](https://github.com/GoogleChromeLabs/comlink) which aims to make it as easy as possible for people developing Rust-on-WebAssembly applications to perform remote procedure calls in [web workers](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Using_web_workers) while allowing the caller and callee to remain in idiomatic Rust code.
