@@ -23,12 +23,11 @@ impl Client {
         Self { client }
     }
 
-    pub async fn add(&self, a: f32, b: f32) -> Result<f32, Error> {
+    pub async fn add(&self, a: f32, b: f32) -> Result<f32, String> {
         self.client
             .add(a, b)
             .await
-            .map_err(Error::from)
-            .and_then(|r| r)
+            .map_err(|error| error.to_string())
     }
 
     pub async fn parse(&self, string: String) -> Result<i32, Error> {
@@ -82,5 +81,10 @@ impl Client {
             .await
             .map_err(Error::from)
             .and_then(|result| result.map(|transferable| transferable.data))
+    }
+
+    #[wasm_bindgen(js_name = getFuture)]
+    pub async fn get_future(&self) -> Result<String, Error> {
+        self.client.get_future().await.map_err(Error::from)
     }
 }

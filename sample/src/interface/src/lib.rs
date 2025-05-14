@@ -32,10 +32,11 @@ impl From<Uint32Array> for Transferable {
 
 #[combadge]
 pub trait Sample {
-    fn add(&self, a: f32, b: f32) -> Result<f32, Error>;
+    fn add(&self, a: f32, b: f32) -> f32;
     fn parse(&self, string: String) -> Result<i32, Error>;
     fn call_with_message(&self, callback: MessageCallback, message: String);
     fn block_thread(&self) -> Result<(), Error>;
     fn double_postable(&self, data: Uint32Array) -> Result<Postable, Error>;
     fn double_transferable(&self, data: Uint32Array) -> Result<Transferable, Error>;
+    fn get_future(&self) -> Box<dyn Future<Output = String>>;
 }

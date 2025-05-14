@@ -44,7 +44,13 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
         <p id="doubleOutput"></p>
     </div>
 
-    <p class="read-the-docs" style="font-size: 60%;">* Improves performance on Chrome, but not Firefox</p>
+    <div class="line">
+        Get a value from the future
+        <button id="getFuture" type="button">Get future time</button>
+        <p id="futureOutput" style="font-size: 70%"></p>
+    </div>
+
+    <p class="read-the-docs" style="font-size: 60%">* Improves performance on Chrome, but not Firefox</p>
 </div>
 `;
 
@@ -146,5 +152,15 @@ init().then(() => {
             )! as HTMLParagraphElement;
             output.innerText = `Passed ${doubled.length} elements in ${duration} ms`;
         });
+    };
+
+    document.getElementById("getFuture")!.onclick = () => {
+        const output = document.getElementById(
+            "futureOutput",
+        )! as HTMLParagraphElement;
+        output.innerHTML = "Ping " + new Date().toTimeString() + "<br>";
+        client
+            .getFuture()
+            .then((futureTime) => (output!.innerText += "Pong " + futureTime));
     };
 });
