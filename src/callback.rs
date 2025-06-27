@@ -238,10 +238,10 @@ where
         } else if let Some(async_local) = self.async_local {
             CallbackServer::create(async_local).map(JsValue::from)
         } else {
-            return Err(Error::SerializeFailed {
+            Err(Error::SerializeFailed {
                 type_name: String::from(type_name::<Self>()),
                 error: String::from("can't serialize callback without a local callback"),
-            });
+            })
         }
     }
 }
