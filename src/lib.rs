@@ -4,7 +4,6 @@
     clippy::missing_panics_doc
 )]
 #![allow(incomplete_features)]
-#![feature(result_flattening)]
 #![feature(specialization)]
 
 extern crate combadge_macros;
