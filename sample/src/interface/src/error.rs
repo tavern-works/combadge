@@ -2,7 +2,7 @@ use anyhow::anyhow;
 use combadge::Post;
 use wasm_bindgen::prelude::*;
 
-#[wasm_bindgen]
+#[wasm_bindgen(js_name = SampleError)]
 pub struct Error {
     internal: anyhow::Error,
 }
@@ -14,7 +14,7 @@ impl Error {
     }
 }
 
-#[wasm_bindgen]
+#[wasm_bindgen(js_class = SampleError)]
 impl Error {
     #[wasm_bindgen(js_name = toString)]
     #[must_use]

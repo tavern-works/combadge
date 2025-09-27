@@ -1,6 +1,6 @@
 import "./style.css";
 
-import init, { Client, Error } from "./main/pkg";
+import init, { Client, SampleError } from "./main/pkg";
 
 document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
 <div>
@@ -97,7 +97,7 @@ init().then(() => {
                 const output = document.getElementById(
                     "parseOutput",
                 ) as HTMLParagraphElement;
-                const errorString = (error as Error).toString();
+                const errorString = (error as SampleError).toString();
                 output.innerText = `Error: ${errorString}`;
                 output.classList.add("error");
             });
